@@ -1,4 +1,4 @@
-import type { AccountNode, Account } from "./accounts.js";
+import type { AccountNode, AccountTX } from "./accounts.js";
 
 type Transaction = AccountTransaction | ExchangeTransaction;
 export class Kernel {
@@ -13,6 +13,7 @@ export class Kernel {
         return ledger;
     }
 }
+
 class Ledger {
     private positions: Set<Position> = new Set<Position>();
 
@@ -27,6 +28,7 @@ class Ledger {
         return position;
     }
 }
+
 class Position {
     constructor(
         public readonly ledger: Ledger,
@@ -38,19 +40,22 @@ class Position {
         }
     }
 }
+
 interface AccountTransactionEntry {
-    account: Account;
+    account: AccountTX;
     delta: number;
 }
+
 interface AccountTransaction {
     ledger: Ledger;
     position: Position;
     transactions: AccountTransactionEntry[];
 }
+
 class ExchangeTransaction {
     constructor(
         public from: AccountTransaction,
         public to: AccountTransaction,
-        public residual: Account
+        public residual: AccountTX
     ) { }
 }

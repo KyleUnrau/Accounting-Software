@@ -14,13 +14,12 @@ const transaction: Transaction = new Transaction(
 );
 
 const consumed = output.consume(525);
-if (!consumed.ok) throw consumed.error;
 
 const exchangeExpense = new TXO(25, cad);
 const transferToUsd = new TXO(500, cad);
 
 const newTransaction: Transaction = new Transaction(
-    [consumed.value],
+    [consumed],
     [exchangeExpense, transferToUsd]
 );
 
@@ -34,19 +33,16 @@ const nextTransaction: Transaction = new Transaction(
 );
 
 const usdConsumed = usdCash.consume(6.55);
-if (!usdConsumed.ok) throw usdConsumed.error;
 
 const consumedTransfersFromCad = transfersFromCad.consume(6.55);
-if (!consumedTransfersFromCad.ok) throw consumedTransfersFromCad.ok;
 
-const expenseUsd = new Transaction([usdConsumed.value], [consumedTransfersFromCad.value]);
+const expenseUsd = new Transaction([usdConsumed], [consumedTransfersFromCad]);
 
 const consumedtransferToUsd = transferToUsd.consume(8.73);
-if (!consumedtransferToUsd.ok) throw consumedtransferToUsd;
-Transaction.exchangeLink(consumedTransfersFromCad.value, consumedtransferToUsd.value);
+Transaction.exchangeLink(consumedTransfersFromCad, consumedtransferToUsd);
 
 const gstExpense = new TXO(8.73, cad);
-const gstTransaction = new Transaction([consumedtransferToUsd.value], [gstExpense]);
+const gstTransaction = new Transaction([consumedtransferToUsd], [gstExpense]);
 
 runCLI({
     cad,

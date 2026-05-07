@@ -1,6 +1,7 @@
 import type { Result } from "../utils.js";
 import type { Position } from "./positions.js";
 
+
 export class Transaction {
     public inputs: (TXI | TXOConsumption)[];
     public outputs: (TXO | TXIConsumption)[];
@@ -15,10 +16,10 @@ export class Transaction {
 
         if (inputs.length === 0 || outputs.length === 0) throw new Error("Cannot construct a transaction with no inputs or no outputs.");
 
-        let txPosition: Position | null = null;
+        let transactionPosition: Position | null = null;
         function verifyPosition(position: Position): void {
-            if (!txPosition) txPosition = position;
-            if (txPosition !== position) throw new Error(`Mismatched positions included within a transaction, must all be tied to same position.`);
+            if (!transactionPosition) transactionPosition = position;
+            if (transactionPosition !== position) throw new Error(`Mismatched positions included within a transaction, must all be tied to same position.`);
         }
 
         for (const input of inputs) {
@@ -49,22 +50,22 @@ export class Transaction {
             outputObjects.push(output);
         }
 
-        if (!txPosition) throw new Error("An unexpected error occurred: verifyPosition broke an invariant.");
-        this.position = txPosition;
+        if (!transactionPosition) throw new Error("An unexpected error occurred: verifyPosition broke an invariant.");
+        this.position = transactionPosition;
 
         if (inputsSum !== outputsSum) throw new Error(`Attempted to construct a transaction with inputs totalling ${inputsSum} and outputs totalling ${outputsSum}`);
 
         this.inputs = inputObjects;
         this.outputs = outputObjects;
     }
-
+    
     public static exchangeLink(from: (TXO | TXIConsumption), to: (TXI | TXOConsumption)): void {
         from.exchangedInput = to;
         to.exchangedOutput = from;
     }
 }
 
-interface TXOConsumption {
+export interface TXOConsumption {
     type: "TXO-consumption";
     source: TXO;
     exchangedOutput: (TXO | TXIConsumption) | undefined;
@@ -74,12 +75,16 @@ interface TXOConsumption {
 export class TXO {
     public consumptions: TXOConsumption[] = [];
     public exchangedInput?: (TXI | TXOConsumption);
+    public quantity: number;
 
     constructor(
-        public quantity: number,
+        quantity: number,
         public position: Position,
         public transaction: Transaction | null = null
-    ) { }
+    ) {
+        if (quantity < 0) throw new Error("The quantity of a TXO cannot be less than 0");
+        this.quantity = quantity;
+    }
 
     public calculateAvailable(): number {
         let available: number = this.quantity;
@@ -88,17 +93,24 @@ export class TXO {
         return available;
     }
 
-    public consume(quantity: number, exchangedOutput?: (TXO | TXIConsumption)): Result<TXOConsumption, Error> {
+    public consume(quantity: number, exchangedOutput?: (TXO | TXIConsumption)): TXOConsumption {
         const available: number = this.calculateAvailable();
-        if (quantity > available) return { ok: false, error: new Error(`Attempted to consume ${quantity} from a TXO that only has ${available} remaining.`) };
+        if (quantity > available) throw new Error(`Attempted to consume ${quantity} from a TXO that only has ${available} remaining.`);
 
         const consumption: TXOConsumption = { type: "TXO-consumption", source: this, quantity, exchangedOutput };
+        return consumption;
+    }
 
-        return { ok: true, value: consumption };
+    public safeConsume(quantity: number, exchangedOutput?: (TXO | TXIConsumption)): Result<TXOConsumption, Error> {
+        try {
+            return {ok: true, value: this.consume(quantity, exchangedOutput)};
+        } catch (err: any) {
+            return {ok: false, error: (err instanceof Error) ? err : new Error(err.toString())};
+        }
     }
 }
 
-interface TXIConsumption {
+export interface TXIConsumption {
     type: "TXI-consumption";
     source: TXI;
     exchangedInput: (TXI | TXOConsumption) | undefined;
@@ -108,12 +120,16 @@ interface TXIConsumption {
 export class TXI {
     public consumptions: TXIConsumption[] = [];
     public exchangedOutput?: (TXO | TXIConsumption);
+    public quantity: number;
 
     constructor(
-        public quantity: number,
+        quantity: number,
         public position: Position,
         public transaction: Transaction | null = null
-    ) { }
+    ) {
+        if (quantity < 0) throw new Error("The quantity of a TXI cannot be less than 0");
+        this.quantity = quantity;
+    }
 
     public calculateAvailable(): number {
         let available: number = this.quantity;
@@ -122,12 +138,19 @@ export class TXI {
         return available;
     }
 
-    public consume(quantity: number, exchangedInput?: (TXI | TXOConsumption)): Result<TXIConsumption, Error> {
+    public consume(quantity: number, exchangedInput?: (TXI | TXOConsumption)): TXIConsumption {
         const available: number = this.calculateAvailable();
-        if (quantity > available) return { ok: false, error: new Error(`Attempted to consume ${quantity} from a TXI that only has ${available} remaining.`) };
+        if (quantity > available) throw new Error(`Attempted to consume ${quantity} from a TXI that only has ${available} remaining.`);
 
         const consumption: TXIConsumption = { type: "TXI-consumption", source: this, quantity, exchangedInput };
+        return consumption;
+    }
 
-        return { ok: true, value: consumption };
+    public safeConsume(quantity: number, exchangedInput?: (TXI | TXOConsumption)): Result<TXIConsumption, Error> {
+        try {
+            return {ok: true, value: this.consume(quantity, exchangedInput)};
+        } catch (err: any) {
+            return {ok: false, error: (err instanceof Error) ? err : new Error(err.toString)}
+        }
     }
 }
