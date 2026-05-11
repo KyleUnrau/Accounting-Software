@@ -115,7 +115,6 @@ export class AccountTransactionEngine {
         } else return {stagedType: "grouped-output", outputs: consumptions};
     }
 
-
     public calculateRootBalance(): number {
         let rootBalance: number = 0;
 
