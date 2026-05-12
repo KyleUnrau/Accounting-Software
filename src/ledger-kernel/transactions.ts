@@ -1,5 +1,5 @@
 import type { Result } from "../utils.js";
-import type { AccountTransactionEngine } from "./accounts.js";
+import type { AccountTransactionEngine } from "./ledger.js";
 import type { Position } from "./positions.js";
 
 export type Input = TXI | TXOConsumption | GroupedInput;

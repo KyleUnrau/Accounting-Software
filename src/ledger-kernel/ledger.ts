@@ -1,24 +1,41 @@
 import { TXI, TXO } from "./transactions.js";
 import type { Position } from "./positions.js";
 import type { StagedGroupedInput, StagedGroupedOutput, StagedTXI, StagedTXIConsumption, StagedTXO, StagedTXOConsumption } from "./transactions.js";
+import type { DisposalMethod } from "./disposal-methods/disposals.js";
 
 export enum Orientation {
     Positive = 1,
     Negative = -1
 }
 
+export class Ledger {
+    constructor(
+        public netAssets: AccountFolder,
+        public equity: AccountFolder
+    ) {}
+}
+
 export type AccountNode = Account | AccountFolder;
 
 export class Account {
+    public positionEngines: Map<Position, AccountTransactionEngine> = new Map();
+
     constructor(
         public name: string,
         public localOrientation: Orientation,
-        public parent: AccountFolder | null = null,
+        public parent: AccountFolder | null,
+        public txoDisposalMethod: DisposalMethod<TXO>,
+        public txiDisposalMethod: DisposalMethod<TXI>
     ) { }
 
     public getRootOrientation(): Orientation {
         if (this.parent === null) return this.localOrientation;
         return this.parent.getRootOrientation() * this.localOrientation;
+    }
+
+    public getEngine(position: Position): AccountTransactionEngine {
+        if (!this.positionEngines.has(position)) this.positionEngines.set(position, new AccountTransactionEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
+        return this.positionEngines.get(position)!;
     }
 }
 
@@ -37,8 +54,13 @@ export class AccountFolder {
         child.parent = this;
     }
 
-    public addAccount(name: string, localOrientation: Orientation): Account {
-        const child = new Account(name, localOrientation);
+    public addAccount(
+        name: string, 
+        localOrientation: Orientation,
+        txoDisposalMethod: DisposalMethod<TXO>,
+        txiDisposalMethod: DisposalMethod<TXI>
+    ): Account {
+        const child = new Account(name, localOrientation, this, txoDisposalMethod, txiDisposalMethod);
         this.addChild(child);
         return child;
     }
@@ -54,8 +76,6 @@ export class AccountFolder {
         return this.parent.getRootOrientation() * this.localOrientation;
     }
 }
-
-export type DisposalMethod<T extends TXO | TXI> = (components: T[], delta: number) => Map<T, number>;
 
 export class AccountTransactionEngine {
     public txos: TXO[] = [];
