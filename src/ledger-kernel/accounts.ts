@@ -67,7 +67,7 @@ export class AccountTransactionEngine {
         public txiDisposalMethod: DisposalMethod<TXI>
     ) {}
 
-    public inputStage(quantity: number): StagedGroupedInput {
+    public stageInput(quantity: number): StagedGroupedInput {
         if (quantity <= 0) throw new Error(`Cannot input a non-positive number from an account`);
 
         const outputTotal: number = this.txos.reduce((sum, txo) => sum + txo.calculateAvailable(), 0);
@@ -91,7 +91,7 @@ export class AccountTransactionEngine {
         } else return {stagedType: "grouped-input", inputs: consumptions};
     }
 
-    public outputStage(quantity: number): StagedGroupedOutput {
+    public stageOutput(quantity: number): StagedGroupedOutput {
         if (quantity <= 0) throw new Error(`Cannot output a non-positive number from an account`);
         
         const inputTotal: number = this.txis.reduce((sum, txi) => sum + txi.calculateAvailable(), 0);
