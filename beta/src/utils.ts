@@ -1,3 +1,5 @@
+import fs from "fs";
+import util from "node:util";
 import { createInterface } from "node:readline/promises";
 
 export type Result<T, E = Error> = { ok: true; value: T; } |
@@ -31,4 +33,17 @@ export function runCLI(context: Record<string, unknown>): void {
     }
 
     void invokeCLI();
+}
+
+export function dump(value: any): string {
+    return util.inspect(value, {
+        depth: null,        // recurse forever
+        colors: false,       // nice terminal colors
+        compact: false,     // easier to read
+        showHidden: false,  // set true if you want non-enumerables/symbols
+    });
+}
+
+export function write(value: any): void {
+    fs.writeFileSync("test.txt", Buffer.from(dump(value), "utf8"));
 }
