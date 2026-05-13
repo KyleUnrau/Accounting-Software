@@ -2,6 +2,7 @@ import type { Position } from "./positions.js";
 import type { DisposalMethod } from "./disposal-methods/disposals.js";
 import type { StagedGroupedOutput, StagedTXIConsumption, StagedTXO, TXO } from "./transactions/outputs.js";
 import type { TXI, StagedGroupedInput, StagedTXOConsumption, StagedTXI } from "./transactions/inputs.js";
+import type { Result } from "../utils.js";
 
 export enum Orientation {
     Positive = 1,
@@ -11,8 +12,32 @@ export enum Orientation {
 export class Ledger {
     constructor(
         public netAssets: AccountFolder,
-        public equity: AccountFolder
+        public equity?: AccountFolder
     ) {}
+
+    public verify(): Result<undefined, Error> {
+        if (!this.equity) return {ok: false, error: new Error("Cannot verify ledger double-entry accuracy as equity is undefined")};
+
+        const rootBalances: Map<Position, number> = this.getRootBalances();
+
+        for (const [position, rootBalance] of rootBalances) {
+            if (rootBalance !== 0) return {ok: false, error: new Error(`Ledger invalid, root balance for ${position.name} calculated as ${rootBalance} instead of 0`)};
+        }
+
+        return {ok: true, value: undefined};
+    }
+
+    public getRootBalances(): Map<Position, number> {
+        const rootBalances: Map<Position, number> = new Map();
+
+        for (const [position, rootBalance] of this.netAssets.getRootBalances()) rootBalances.set(position, rootBalance + (rootBalances.get(position) || 0));
+
+        if (this.equity) {
+            for (const [position, rootBalance] of this.equity.getRootBalances()) rootBalances.set(position, rootBalance + (rootBalances.get(position) || 0));
+        }
+
+        return rootBalances;
+    }
 }
 
 export type AccountNode = Account | AccountFolder;
@@ -36,6 +61,27 @@ export class Account {
     public getEngine(position: Position): AccountTransactionEngine {
         if (!this.positionEngines.has(position)) this.positionEngines.set(position, new AccountTransactionEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
         return this.positionEngines.get(position)!;
+    }
+
+    public getRootBalance(position: Position): number {
+        if (!this.positionEngines.has(position)) return 0;
+        return this.getEngine(position).getRootBalance();
+    }
+
+    public getRootBalances(): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const [position, engine] of this.positionEngines) result.set(position, engine.getRootBalance());
+        return result;
+    }
+
+    public getBalance(position: Position): number {
+        return this.getRootBalance(position) * this.getRootOrientation();
+    }
+
+    public getBalances(): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const [position, rootBalance] of this.getRootBalances()) result.set(position, rootBalance * this.getRootOrientation());
+        return result;
     }
 }
 
@@ -74,6 +120,32 @@ export class AccountFolder {
     public getRootOrientation(): Orientation {
         if (this.parent === null) return this.localOrientation;
         return this.parent.getRootOrientation() * this.localOrientation;
+    }
+
+    public getRootBalance(position: Position): number {
+        let rootBalance: number = 0;
+        for (const child of this.children) rootBalance += child.getRootBalance(position);
+        return rootBalance;
+    }
+
+    public getRootBalances(): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const child of this.children) {
+            const rootBalances: Map<Position, number> = child.getRootBalances();
+            for (const [position, rootBalance] of rootBalances) result.set(position, rootBalance + (result.get(position) || 0));
+        }
+
+        return result;
+    }
+
+    public getBalance(position: Position): number {
+        return this.getRootBalance(position) * this.getRootOrientation();
+    }
+
+    public getBalances(): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const [position, rootBalance] of this.getRootBalances()) result.set(position, rootBalance * this.getRootOrientation());
+        return result;
     }
 }
 
@@ -135,7 +207,7 @@ export class AccountTransactionEngine {
         } else return {stagedType: "grouped-output", outputs: consumptions};
     }
 
-    public calculateRootBalance(): number {
+    public getRootBalance(): number {
         let rootBalance: number = 0;
 
         for (const txi of this.txis) rootBalance -= txi.calculateAvailable();
