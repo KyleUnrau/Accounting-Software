@@ -3,8 +3,10 @@ import { clear } from "node:console";
 import { dump, runCLI, write } from "./utils.js";
 import { fifo } from "./ledger-kernel/disposal-methods/basic-fifo.js";
 import { AccountTransactionEngine } from "./ledger-kernel/ledger.js";
-import {  TXO, TXI, Transaction } from "./ledger-kernel/transactions.js";
 import type { Position } from "./ledger-kernel/positions.js";
+import { TXO } from "./ledger-kernel/transactions/outputs.js";
+import { TXI } from "./ledger-kernel/transactions/inputs.js";
+import { Transaction } from "./ledger-kernel/transactions.js";
 
 const cad: Position = { name: "Canadian Dollars" };
 const usd: Position = { name: "United States Dollars" };

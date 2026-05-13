@@ -1,7 +1,7 @@
-import { TXI, TXO } from "./transactions.js";
 import type { Position } from "./positions.js";
-import type { StagedGroupedInput, StagedGroupedOutput, StagedTXI, StagedTXIConsumption, StagedTXO, StagedTXOConsumption } from "./transactions.js";
 import type { DisposalMethod } from "./disposal-methods/disposals.js";
+import type { StagedGroupedOutput, StagedTXIConsumption, StagedTXO, TXO } from "./transactions/outputs.js";
+import type { TXI, StagedGroupedInput, StagedTXOConsumption, StagedTXI } from "./transactions/inputs.js";
 
 export enum Orientation {
     Positive = 1,

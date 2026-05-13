@@ -1,4 +1,5 @@
-import type { TXO, TXI } from "../transactions.js";
+import { TXO } from "../transactions/outputs.js";
+import { TXI } from "../transactions/inputs.js";
 
 export const fifo = <T extends TXO | TXI>(
     components: T[],
