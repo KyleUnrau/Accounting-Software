@@ -1,5 +1,4 @@
 import type { Result } from "../utils.js";
-import type { AccountTransactionEngine } from "./ledger.js";
 import type { Position } from "./positions.js";
 import { TXI, TXOConsumption, GroupedInput, type InputMapping, type StagedGroupedInput, type StagedTXI, type StagedTXOConsumption } from "./transactions/inputs.js";
 import { TXIConsumption, TXO, GroupedOutput, type OutputMapping, type StagedGroupedOutput, type StagedTXIConsumption, type StagedTXO } from "./transactions/outputs.js";

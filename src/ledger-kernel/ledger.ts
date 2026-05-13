@@ -3,6 +3,7 @@ import type { DisposalMethod } from "./disposal-methods/disposals.js";
 import type { StagedGroupedOutput, StagedTXIConsumption, StagedTXO, TXO } from "./transactions/outputs.js";
 import type { TXI, StagedGroupedInput, StagedTXOConsumption, StagedTXI } from "./transactions/inputs.js";
 import type { Result } from "../utils.js";
+import type { StagedInput, StagedOutput } from "./transactions.js";
 
 export enum Orientation {
     Positive = 1,
@@ -82,6 +83,14 @@ export class Account {
         const result: Map<Position, number> = new Map();
         for (const [position, rootBalance] of this.getRootBalances()) result.set(position, rootBalance * this.getRootOrientation());
         return result;
+    }
+
+    public stageOutput(position: Position, quantity: number): StagedOutput {
+        return this.getEngine(position).stageOutput(quantity);
+    }
+
+    public stageInput(position: Position, quantity: number): StagedInput {
+        return this.getEngine(position).stageInput(quantity);
     }
 }
 
