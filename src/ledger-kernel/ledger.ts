@@ -13,12 +13,10 @@ export enum Orientation {
 export class Ledger {
     constructor(
         public netAssets: AccountFolder,
-        public equity?: AccountFolder
+        public equity: AccountFolder
     ) {}
 
     public verify(): Result<undefined, Error> {
-        if (!this.equity) return {ok: false, error: new Error("Cannot verify ledger double-entry accuracy as equity is undefined")};
-
         const rootBalances: Map<Position, number> = this.getRootBalances();
 
         for (const [position, rootBalance] of rootBalances) {
@@ -32,10 +30,7 @@ export class Ledger {
         const rootBalances: Map<Position, number> = new Map();
 
         for (const [position, rootBalance] of this.netAssets.getRootBalances()) rootBalances.set(position, rootBalance + (rootBalances.get(position) || 0));
-
-        if (this.equity) {
-            for (const [position, rootBalance] of this.equity.getRootBalances()) rootBalances.set(position, rootBalance + (rootBalances.get(position) || 0));
-        }
+        for (const [position, rootBalance] of this.equity.getRootBalances()) rootBalances.set(position, rootBalance + (rootBalances.get(position) || 0));
 
         return rootBalances;
     }
@@ -59,11 +54,6 @@ export class Account {
         return this.parent.getRootOrientation() * this.localOrientation;
     }
 
-    public getEngine(position: Position): AccountTransactionEngine {
-        if (!this.positionEngines.has(position)) this.positionEngines.set(position, new AccountTransactionEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
-        return this.positionEngines.get(position)!;
-    }
-
     public getRootBalance(position: Position): number {
         if (!this.positionEngines.has(position)) return 0;
         return this.getEngine(position).getRootBalance();
@@ -85,6 +75,11 @@ export class Account {
         return result;
     }
 
+    public getEngine(position: Position): AccountTransactionEngine {
+        if (!this.positionEngines.has(position)) this.positionEngines.set(position, new AccountTransactionEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
+        return this.positionEngines.get(position)!;
+    }
+
     public stageOutput(position: Position, quantity: number): StagedOutput {
         return this.getEngine(position).stageOutput(quantity);
     }
@@ -104,7 +99,17 @@ export class AccountFolder {
         for (const child of this.children) child.parent = this;
     }
 
+    public hasChild(child: AccountNode): boolean {
+        for (const immediateChild of this.children) {
+            if (child === immediateChild) return true;
+            else if (immediateChild instanceof AccountFolder) return immediateChild.hasChild(child);
+        }
+        
+        return false;
+    }
+
     public addChild(child: AccountNode): void {
+        if (this.hasChild(child)) throw new Error(`Cannot add the same children twice within an account folder structure`);
         this.children.push(child);
         child.parent = this;
     }
