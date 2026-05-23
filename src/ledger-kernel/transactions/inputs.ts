@@ -1,7 +1,10 @@
 import type { AccountTransactionEngine } from "../ledger.js";
 import type { Position } from "../positions.js";
-import type { Output, Transaction } from "../transactions.js";
-import type { StagedTXIConsumption, TXIConsumption, TXO } from "./outputs.js";
+import type { Transaction } from "../transactions.js";
+import type { Output, StagedTXIConsumption, TXIConsumption, TXO } from "./outputs.js";
+
+export type Input = TXI | TXOConsumption | GroupedInput;
+export type StagedInput = StagedTXI | StagedTXOConsumption | StagedGroupedInput;
 
 // - TXI - //
 export interface StagedTXI {

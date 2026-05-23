@@ -1,13 +1,7 @@
 import type { Result } from "../utils.js";
 import type { Position } from "./positions.js";
-import { TXI, TXOConsumption, GroupedInput, type InputMapping, type StagedGroupedInput, type StagedTXI, type StagedTXOConsumption } from "./transactions/inputs.js";
-import { TXIConsumption, TXO, GroupedOutput, type OutputMapping, type StagedGroupedOutput, type StagedTXIConsumption, type StagedTXO } from "./transactions/outputs.js";
-
-export type Input = TXI | TXOConsumption | GroupedInput;
-export type Output = TXO | TXIConsumption | GroupedOutput;
-
-export type StagedInput = StagedTXI | StagedTXOConsumption | StagedGroupedInput;
-export type StagedOutput = StagedTXO | StagedTXIConsumption | StagedGroupedOutput;
+import { TXI, TXOConsumption, GroupedInput, type InputMapping, type StagedGroupedInput, type StagedTXI, type StagedTXOConsumption, type StagedInput, type Input } from "./transactions/inputs.js";
+import { TXIConsumption, TXO, GroupedOutput, type OutputMapping, type StagedGroupedOutput, type StagedTXIConsumption, type StagedTXO, type StagedOutput, type Output } from "./transactions/outputs.js";
 
 export class Transaction {
     public position: Position;
@@ -17,7 +11,7 @@ export class Transaction {
 
     constructor(
         stagedInputs: StagedInput[],
-        stagedOutputs: StagedOutput[]
+        stagedOutputs: StagedOutput[],
     ) {
         const inputs: InputMapping = {
             txis: new Map(),
@@ -183,7 +177,10 @@ export class Transaction {
         return {ok: true, value: position};
     }
     
-    public static exchangeLink(from: Output, to: Input): void {
+    public static exchangeLink(
+        from: Output,
+        to: Input
+    ): void {
         from.exchangedInput = to;
         to.exchangedOutput = from;
     }

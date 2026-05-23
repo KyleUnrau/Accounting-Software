@@ -31,18 +31,18 @@ const netTransfers: Account = netWorth.addAccount("Net Transfers", Orientation.N
 const entry1 = openingBalance.stageInput(cad, 1000);
 const entry2 = cash.stageOutput(cad, 1000);
 
-const transaction = new Transaction([entry1], [entry2]);
+const transaction = ledger.newTransaction([entry1], [entry2]);
 
 const entry3 = cash.stageInput(cad, 525);
 const entry4 = exchangeExpense.stageOutput(cad, 25);
 const entry5 = netTransfers.stageOutput(cad, 500);
 
-const transaction2cad = new Transaction([entry3], [entry4, entry5]);
+const transaction2cad = ledger.newTransaction([entry3], [entry4, entry5]);
 
 const entry6 = netTransfers.stageInput(usd, 375);
 const entry7 = cash.stageOutput(usd, 375);
 
-const transaction2usd = new Transaction([entry6], [entry7]);
+const transaction2usd = ledger.newTransaction([entry6], [entry7]);
 
 Transaction.exchangeLink(transaction2cad.getOutputFromStaged(entry5), transaction2usd.getInputFromStaged(entry6));
 

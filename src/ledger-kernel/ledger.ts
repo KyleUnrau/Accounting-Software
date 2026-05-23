@@ -1,9 +1,9 @@
 import type { Position } from "./positions.js";
 import type { DisposalMethod } from "./disposal-methods/disposals.js";
-import type { StagedGroupedOutput, StagedTXIConsumption, StagedTXO, TXO } from "./transactions/outputs.js";
-import type { TXI, StagedGroupedInput, StagedTXOConsumption, StagedTXI } from "./transactions/inputs.js";
+import type { StagedGroupedOutput, StagedOutput, StagedTXIConsumption, StagedTXO, TXO } from "./transactions/outputs.js";
+import type { TXI, StagedGroupedInput, StagedTXOConsumption, StagedTXI, StagedInput } from "./transactions/inputs.js";
 import type { Result } from "../utils.js";
-import type { StagedInput, StagedOutput } from "./transactions.js";
+import { Transaction } from "./transactions.js";
 
 export enum Orientation {
     Positive = 1,
@@ -11,10 +11,18 @@ export enum Orientation {
 }
 
 export class Ledger {
+    public transactions: Transaction[] = [];
+
     constructor(
         public netAssets: AccountFolder,
         public equity: AccountFolder
     ) {}
+
+    public newTransaction(stagedInputs: StagedInput[], stagedOutputs: StagedOutput[]): Transaction {
+        const transaction = new Transaction(stagedInputs, stagedOutputs);
+        this.transactions.push(transaction);
+        return transaction;
+    }
 
     public verify(): Result<undefined, Error> {
         const rootBalances: Map<Position, number> = this.getRootBalances();
@@ -173,7 +181,7 @@ export class AccountTransactionEngine {
         public txiDisposalMethod: DisposalMethod<TXI>
     ) {}
 
-    public stageInput(quantity: number): StagedGroupedInput {
+    public stageInput(quantity: number): StagedTXI | StagedGroupedInput {
         if (quantity <= 0) throw new Error(`Cannot input a non-positive number from an account`);
 
         const outputTotal: number = this.txos.reduce((sum, txo) => sum + txo.calculateAvailable(), 0);
@@ -193,11 +201,12 @@ export class AccountTransactionEngine {
         const remainder = quantity - consumptionTotal;
         if (remainder > 0) {
             const input: StagedTXI = {stagedType: "txi", quantity: remainder, position: this.position, accountEngine: this};
+            if (consumptions.length === 0) return input;
             return {stagedType: "grouped-input", inputs: [...consumptions, input]};
         } else return {stagedType: "grouped-input", inputs: consumptions};
     }
 
-    public stageOutput(quantity: number): StagedGroupedOutput {
+    public stageOutput(quantity: number): StagedTXO | StagedGroupedOutput {
         if (quantity <= 0) throw new Error(`Cannot output a non-positive number from an account`);
         
         const inputTotal: number = this.txis.reduce((sum, txi) => sum + txi.calculateAvailable(), 0);
@@ -217,6 +226,7 @@ export class AccountTransactionEngine {
         const remainder = quantity - consumptionTotal;
         if (remainder > 0) {
             const output: StagedTXO = {stagedType: "txo", quantity: remainder, position: this.position, accountEngine: this};
+            if (consumptions.length === 0) return output;
             return {stagedType: "grouped-output", outputs: [...consumptions, output]};
         } else return {stagedType: "grouped-output", outputs: consumptions};
     }

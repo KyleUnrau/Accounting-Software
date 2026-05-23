@@ -1,7 +1,10 @@
 import type { AccountTransactionEngine } from "../ledger.js";
 import type { Position } from "../positions.js";
-import type { Input, Transaction } from "../transactions.js";
-import type { StagedTXOConsumption, TXI, TXOConsumption } from "./inputs.js";
+import type { Transaction } from "../transactions.js";
+import type { Input, StagedTXOConsumption, TXI, TXOConsumption } from "./inputs.js";
+
+export type Output = TXO | TXIConsumption | GroupedOutput;
+export type StagedOutput = StagedTXO | StagedTXIConsumption | StagedGroupedOutput;
 
 export interface StagedTXO {
     stagedType: "txo";
@@ -55,7 +58,7 @@ export class TXIConsumption {
         quantity: number,
         public source: TXI,
         public transaction: Transaction,
-        public exchangedInput?: (TXI | TXOConsumption)
+        public exchangedInput?: (TXI | TXOConsumption),
     ) {
         if (quantity < 0) throw new Error("The quantity of a TXO cannot be less than 0");
         this.quantity = quantity;

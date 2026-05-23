@@ -1,7 +1,7 @@
 import { TXO } from "../transactions/outputs.js";
 import { TXI } from "../transactions/inputs.js";
 
-export const fifo = <T extends TXO | TXI>(
+export const fifo = <T extends TXO<any> | TXI<any>>(
     components: T[],
     quantity: number
 ): Map<T, number> => {
