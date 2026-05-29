@@ -4,8 +4,8 @@ import { TXI, TXOConsumption } from "./inputs.js";
 import { TXIConsumption, TXO } from "./outputs.js";
 
 export class Exchange {
-    public from: ExchangedTXO;
-    public to: ExchangedTXI;
+    public readonly from: ExchangedTXO;
+    public readonly to: ExchangedTXI;
 
     constructor(
         from: {quantity: number, position: Position},
@@ -31,17 +31,41 @@ export interface ReverseExchange {
 }
 
 export class ExchangedTXO extends TXO {
+    public type = "exchanged-txo";
+
     constructor(
         quantity: number,
         position: Position,
-        public exchange: Exchange
+        public readonly exchange: Exchange
     ) { super(quantity, position); }
 }
 
 export class ExchangedTXI extends TXI {
+    public type = "exchanged-txi";
+
     constructor(
         quantity: number,
         position: Position,
-        public exchange: Exchange
+        public readonly exchange: Exchange
+    ) { super(quantity, position); }
+}
+
+export class ResidualTXO extends TXO {
+    public type = "residual-txo";
+
+    constructor(
+        quantity: number,
+        position: Position,
+        public readonly exchange: Exchange
+    ) { super(quantity, position); }
+}
+
+export class ResidualTXI extends TXI {
+    public type = "residual-txi";
+
+    constructor(
+        quantity: number,
+        position: Position,
+        public readonly exchange: Exchange
     ) { super(quantity, position); }
 }

@@ -5,7 +5,7 @@ import { TXOConsumption, type TXI } from "./inputs.js";
 export type Output = TXO | TXIConsumption;
 
 export class TXO {
-    public readonly type = "txo";
+    public type = "txo";
     public quantity: number;
 
     constructor(

@@ -2,13 +2,13 @@ import { clear } from "node:console";
 
 import { dump, runCLI, write } from "./utils.js";
 import { fifo } from "./ledger-kernel/disposal-methods/basic-fifo.js";
-import { TXIConsumption, TXO, type Output } from "./ledger-kernel/transactions/outputs.js";
+import { TXO, type Output } from "./ledger-kernel/transactions/outputs.js";
 import { TXI, type Input } from "./ledger-kernel/transactions/inputs.js";
 import { Transaction } from "./ledger-kernel/transactions.js";
 import { Ledger, Orientation } from "./ledger-kernel/ledger.js";
 import { StandardAccount, AccountFolder } from "./ledger-kernel/accounts.js";
 import type { Position } from "./ledger-kernel/positions.js";
-import { Exchange, ExchangedTXO, type ReverseExchange } from "./ledger-kernel/transactions/exchange.js";
+import { Exchange, type ReverseExchange } from "./ledger-kernel/transactions/exchange.js";
 
 const btc: Position = { name: "Bitcoin" };
 const cad: Position = { name: "Canadian Dollars" };
@@ -79,10 +79,12 @@ inputs.push(capitalGains.generateInputs(cad, 550 - reverseExchanges[1]!.to.quant
 outputs.push(cash.generateOutputs(cad, 550, ledger.transactions)); // Output #8
 ledger.newTransaction([...inputs[7]!, ...inputs[8]!], outputs[8]!); // Transaction #7
 
+reverseExchanges.push(exchanges[1]!.recapture(375, ledger.transactions)); // Reverse Exchange #2
+
 inputs.push(cash.generateInputs(cad, 550, ledger.transactions)); // Input #9
-outputs.push(netTransfers.generateOutputs(cad, 500)) // Output #10
-outputs.push(capitalGains.generateOutputs(cad, 50)); // Output #11
-transactions.push(ledger.newTransaction(inputs[9]!, [...outputs[10]!, ...outputs[11]!])); // Transaction #8
+outputs.push([reverseExchanges[2]!.from]); // Output #10
+outputs.push(capitalGains.generateOutputs(cad, 50, ledger.transactions)); // Output #11
+ledger.newTransaction(inputs[9]!, [...outputs[10]!, ...outputs[11]!]); // Transaction #8
 
 inputs.push(netTransfers.generateInputs(btc, 0.005)); // Input #10
 inputs.push(capitalGains.generateInputs(btc, 0.0005)); // Input #11

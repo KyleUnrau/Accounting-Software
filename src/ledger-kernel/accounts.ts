@@ -7,7 +7,6 @@ import { TXO, type Output, type TXIConsumption } from "./transactions/outputs.js
 
 export type AccountNode = Account | AccountFolder;
 
-
 export abstract class Account {
     constructor(
         public name: string,
@@ -101,14 +100,14 @@ export class AccountFolder {
 }
 
 export class StandardAccount extends Account {
-    public engines: Map<Position, StandardAccountEngine> = new Map();
+    public readonly engines: Map<Position, StandardAccountEngine> = new Map();
 
     constructor(
         name: string,
         localOrientation: Orientation,
         parent: AccountFolder | null,
-        public txoDisposalMethod: DisposalMethod<TXO>,
-        public txiDisposalMethod: DisposalMethod<TXI>
+        public readonly txoDisposalMethod: DisposalMethod<TXO>,
+        public readonly txiDisposalMethod: DisposalMethod<TXI>
     ) { super(name, localOrientation, parent); }
 
     public getRootBalance(position: Position, transactions: Transaction[]): number {
@@ -147,13 +146,13 @@ export class StandardAccount extends Account {
 }
 
 export class StandardAccountEngine {
-    public txos: TXO[] = [];
-    public txis: TXI[] = [];
+    public readonly txos: TXO[] = [];
+    public readonly txis: TXI[] = [];
 
     constructor(
-        public position: Position,
-        public txoDisposalMethod: DisposalMethod<TXO>,
-        public txiDisposalMethod: DisposalMethod<TXI>
+        public readonly position: Position,
+        public readonly txoDisposalMethod: DisposalMethod<TXO>,
+        public readonly txiDisposalMethod: DisposalMethod<TXI>
     ) { }
 
     public generateInputs(quantity: number, transactions: Transaction[]): Input[] {

@@ -6,7 +6,7 @@ export type Input = TXI | TXOConsumption;
 
 // - TXI - //
 export class TXI {
-    public readonly type = "txi";
+    public type = "txi";
     public quantity: number;
 
     constructor(
