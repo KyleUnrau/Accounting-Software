@@ -4,14 +4,19 @@ import type { Position } from "./positions.js";
 import type { Transaction } from "./transactions.js";
 import { TXI, TXOConsumption, type Input } from "./transactions/inputs.js";
 import { TXO, type Output, type TXIConsumption } from "./transactions/outputs.js";
+import { ResidualTXI, ResidualTXO, type Exchange } from "./transactions/exchange.js";
 
 export type AccountNode = Account | AccountFolder;
 
-export abstract class Account {
+export class Account {
+    public readonly engines: Map<Position, AccountEngine> = new Map();
+
     constructor(
         public name: string,
         public localOrientation: Orientation,
-        public parent: AccountFolder | null
+        public parent: AccountFolder | null,
+        public readonly txoDisposalMethod: DisposalMethod<TXO>,
+        public readonly txiDisposalMethod: DisposalMethod<TXI>
     ) { }
 
     public getRootOrientation(): Orientation {
@@ -19,10 +24,51 @@ export abstract class Account {
         return this.parent.getRootOrientation() * this.localOrientation;
     }
 
-    public abstract getRootBalance(position: Position, transactions: Transaction[]): number;
-    public abstract getRootBalances(transactions: Transaction[]): Map<Position, number>;
-    public abstract getBalance(position: Position, transactions: Transaction[]): number;
-    public abstract getBalances(transactions: Transaction[]): Map<Position, number>;
+    public getRootBalance(position: Position, transactions: Transaction[]): number {
+        if (!this.engines.has(position)) return 0;
+        return this.getEngine(position).getRootBalance(transactions);
+    }
+
+    public getRootBalances(transactions: Transaction[]): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const [position, _engine] of this.engines) result.set(position, this.getRootBalance(position, transactions));
+        return result;
+    }
+
+    public getBalance(position: Position, transactions: Transaction[]): number {
+        return this.getRootBalance(position, transactions) * this.getRootOrientation();
+    }
+
+    public getBalances(transactions: Transaction[]): Map<Position, number> {
+        const result: Map<Position, number> = new Map();
+        for (const [position, rootBalance] of this.getRootBalances(transactions)) result.set(position, rootBalance * this.getRootOrientation());
+        return result;
+    }
+
+    public getEngine(position: Position): AccountEngine {
+        if (!this.engines.has(position)) this.engines.set(position, new AccountEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
+        return this.engines.get(position)!;
+    }
+
+    public generateInputs(position: Position, quantity: number, transactions: Transaction[]): Input[] {
+        return this.getEngine(position).generateInputs(quantity, transactions);
+    }
+
+    public generateOutputs(position: Position, quantity: number, transactions: Transaction[]): Output[] {
+        return this.getEngine(position).generateOutputs(quantity, transactions);
+    }
+
+    public generateResidualInput(position: Position, quantity: number, exchange: Exchange): ResidualTXI {
+        const txi = new ResidualTXI(quantity, position, exchange);
+        this.getEngine(position).txis.push(txi);
+        return txi;
+    }
+
+    public generateResidualOutput(position: Position, quantity: number, exchange: Exchange): ResidualTXO {
+        const txo = new ResidualTXO(quantity, position, exchange);
+        this.getEngine(position).txos.push(txo);
+        return txo;
+    }
 }
 
 export class AccountFolder {
@@ -55,8 +101,8 @@ export class AccountFolder {
         localOrientation: Orientation,
         txoDisposalMethod: DisposalMethod<TXO>,
         txiDisposalMethod: DisposalMethod<TXI>
-    ): StandardAccount {
-        const child = new StandardAccount(name, localOrientation, this, txoDisposalMethod, txiDisposalMethod);
+    ): Account {
+        const child = new Account(name, localOrientation, this, txoDisposalMethod, txiDisposalMethod);
         this.addChild(child);
         return child;
     }
@@ -99,53 +145,7 @@ export class AccountFolder {
     }
 }
 
-export class StandardAccount extends Account {
-    public readonly engines: Map<Position, StandardAccountEngine> = new Map();
-
-    constructor(
-        name: string,
-        localOrientation: Orientation,
-        parent: AccountFolder | null,
-        public readonly txoDisposalMethod: DisposalMethod<TXO>,
-        public readonly txiDisposalMethod: DisposalMethod<TXI>
-    ) { super(name, localOrientation, parent); }
-
-    public getRootBalance(position: Position, transactions: Transaction[]): number {
-        if (!this.engines.has(position)) return 0;
-        return this.getEngine(position).getRootBalance(transactions);
-    }
-
-    public getRootBalances(transactions: Transaction[]): Map<Position, number> {
-        const result: Map<Position, number> = new Map();
-        for (const [position, _engine] of this.engines) result.set(position, this.getRootBalance(position, transactions));
-        return result;
-    }
-
-    public getBalance(position: Position, transactions: Transaction[]): number {
-        return this.getRootBalance(position, transactions) * this.getRootOrientation();
-    }
-
-    public getBalances(transactions: Transaction[]): Map<Position, number> {
-        const result: Map<Position, number> = new Map();
-        for (const [position, rootBalance] of this.getRootBalances(transactions)) result.set(position, rootBalance * this.getRootOrientation());
-        return result;
-    }
-
-    public getEngine(position: Position): StandardAccountEngine {
-        if (!this.engines.has(position)) this.engines.set(position, new StandardAccountEngine(position, this.txoDisposalMethod, this.txiDisposalMethod));
-        return this.engines.get(position)!;
-    }
-
-    public generateInputs(position: Position, quantity: number, transactions: Transaction[]): Input[] {
-        return this.getEngine(position).generateInputs(quantity, transactions);
-    }
-
-    public generateOutputs(position: Position, quantity: number, transactions: Transaction[]): Output[] {
-        return this.getEngine(position).generateOutputs(quantity, transactions);
-    }
-}
-
-export class StandardAccountEngine {
+export class AccountEngine {
     public readonly txos: TXO[] = [];
     public readonly txis: TXI[] = [];
 
@@ -213,8 +213,4 @@ export class StandardAccountEngine {
 
         return rootBalance;
     }
-}
-
-export class ExchangeAccount extends Account {
-    
 }
