@@ -15,7 +15,7 @@ export class BookValueEngine {
         return this.traceTXO(txo, quantity, new Set<TXO>());
     }
 
-    private traceTXO(txo: TXO, quantity: number, visited: Set<TXO>): BasisPath[] {
+    private traceTXO(txo: TXO, quantity: number, visited: Set<TXO> = new Set()): BasisPath[] {
         if (visited.has(txo)) throw new Error(`Cycle detected: TXO encountered twice in traversal path`);
 
         const nextVisited = new Set(visited);
@@ -36,7 +36,7 @@ export class BookValueEngine {
         return result;
     }
 
-    private traceInput(input: Input, quantity: number, visited: Set<TXO>): BasisPath[] {
+    private traceInput(input: Input, quantity: number, visited: Set<TXO> = new Set()): BasisPath[] {
         if (input instanceof TXOConsumption) {
             return this.traceTXO(input.source, quantity, visited);
         }
