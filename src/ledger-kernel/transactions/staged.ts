@@ -3,6 +3,9 @@ import type { Position } from "../positions.js";
 import type { TransactionLike } from "./transaction.js";
 import type { Input } from "./inputs.js";
 import type { Output } from "./outputs.js";
+import type { ResidualTarget, TerminalAccount } from "../accounts/computed.js";
+import type { ExchangeTarget } from "./special-edges/exchange.js";
+import { toArray } from "../../utils.js";
 
 /**
  * A declarative, unresolved draw against an account — just what to draw and how much, with no
@@ -23,8 +26,21 @@ export interface StagedOutput {
     quantity: number | bigint;
 }
 
-function toArray<T>(value: T | readonly T[]): readonly T[] {
-    return Array.isArray(value) ? (value as readonly T[]) : [value as T];
+export interface StagedTransaction {
+    inputs: StagedInput | StagedInput[];
+    outputs: StagedOutput | StagedOutput[];
+}
+
+export interface StagedExchange {
+    fromInputs: StagedInput | StagedInput[];
+    toOutputs: StagedOutput | StagedOutput[];
+    residual: ResidualTarget;
+    exchange: ExchangeTarget;
+}
+
+export interface StagedTerminal {
+    inputs: StagedInput | StagedInput[];
+    account: TerminalAccount;
 }
 
 /**
@@ -33,9 +49,9 @@ function toArray<T>(value: T | readonly T[]): readonly T[] {
  * multiple specs drawing on the same account + position within one transaction can't double-draw
  * the same lot — this is the one place that reservation bookkeeping needs to exist at all.
  */
-export function materializeInputs(specs: StagedInput | readonly StagedInput[], transactions: readonly TransactionLike[]): Input[] {
+export function materializeInputs(stagedInput: StagedInput | readonly StagedInput[], transactions: readonly TransactionLike[]): Input[] {
     const resolved: Input[] = [];
-    for (const spec of toArray(specs)) {
+    for (const spec of toArray(stagedInput)) {
         const generated = spec.account.generateInputs(spec.position, spec.quantity, [...transactions, { inputs: resolved, outputs: [] }]);
         resolved.push(...generated);
     }
@@ -43,9 +59,9 @@ export function materializeInputs(specs: StagedInput | readonly StagedInput[], t
 }
 
 /** The output-side counterpart of {@link materializeInputs}. */
-export function materializeOutputs(specs: StagedOutput | readonly StagedOutput[], transactions: readonly TransactionLike[]): Output[] {
+export function materializeOutputs(stagedOutput: StagedOutput | readonly StagedOutput[], transactions: readonly TransactionLike[]): Output[] {
     const resolved: Output[] = [];
-    for (const spec of toArray(specs)) {
+    for (const spec of toArray(stagedOutput)) {
         const generated = spec.account.generateOutputs(spec.position, spec.quantity, [...transactions, { inputs: [], outputs: resolved }]);
         resolved.push(...generated);
     }

@@ -49,3 +49,7 @@ export function muldiv(a: number, b: number, c: number): number {
     return Number(BigInt(a) * BigInt(b) / BigInt(c));
 }
 
+export function toArray<T>(value: T | readonly T[]): readonly T[] {
+    return Array.isArray(value) ? (value as readonly T[]) : [value as T];
+}
+

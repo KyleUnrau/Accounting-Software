@@ -142,20 +142,28 @@ export namespace ScenarioLedger {
             residual: accounts.residualA,
             exchange: {from: accounts.toB, to: accounts.fromA}
         }),
-        event2: (): LedgerEvent => {
-            const event = ledger.beginEvent();
-            event.stageTerminal({
-                inputs: {position: positions.b, account: accounts.cash, quantity: 50},
-                account: accounts.exchangeExpense
-            });
-            event.stageExchange({
-                fromInputs: {position: positions.b, account: accounts.cash, quantity: 200},
-                toOutputs: {position: positions.c, account: accounts.inventory, quantity: 2000},
-                residual: accounts.residualB,
-                exchange: {from: accounts.toC, to: accounts.fromB}
-            });
-            return event.register();
-        }
+        event2: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.b, account: accounts.cash, quantity: 250},
+            toOutputs: {position: positions.a, account: accounts.cash, quantity: 550},
+            residual: accounts.residualB,
+            exchange: {from: accounts.toA, to: accounts.fromB}
+        }),
+        event3: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.a, account: accounts.cash, quantity: 500},
+            toOutputs: {position: positions.b, account: accounts.cash, quantity: 250},
+            residual: accounts.residualA,
+            exchange: {from: accounts.toB, to: accounts.fromA}
+        }),
+        event4: (): LedgerEvent => ledger.newTransaction({
+            inputs: {position: positions.b, account: accounts.accountsPayable, quantity: 250},
+            outputs: {position: positions.b, account: accounts.cash, quantity: 250}
+        }),
+        event5: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.b, account: accounts.cash, quantity: 500},
+            toOutputs: {position: positions.a, account: accounts.cash, quantity: 800},
+            residual: accounts.residualB,
+            exchange: {from: accounts.toA, to: accounts.fromB}
+        })
     }
 
     export function buildSampleLedger(): LedgerView {

@@ -1,28 +1,10 @@
-import { ExchangeResolution, ExchangeTransactions, type ExchangeTarget } from "../equity-policy/exchange.js";
+import { ExchangeResolution, ExchangeTransactions } from "../equity-policy/exchange.js";
 import { TerminalResolution, type TerminalTransactions } from "../equity-policy/terminal.js";
-import type { ResidualTarget, TerminalAccount } from "./accounts/computed.js";
 import type { Ledger } from "./ledger.js";
 import type { TransactionGroup } from "./transactions/group.js";
 import { type TransactionNode, type TransactionNodeFactory, isTransactionNode } from "./transactions/node.js";
-import { type StagedInput, type StagedOutput, materializeInputs, materializeOutputs } from "./transactions/staged.js";
+import { type StagedExchange, type StagedTransaction, type StagedTerminal, materializeInputs, materializeOutputs } from "./transactions/staged.js";
 import { Transaction } from "./transactions/transaction.js";
-
-export interface StagedTransaction {
-    inputs: StagedInput | StagedInput[];
-    outputs: StagedOutput | StagedOutput[];
-}
-
-export interface ExchangeParameters {
-    fromInputs: StagedInput | StagedInput[];
-    toOutputs: StagedOutput | StagedOutput[];
-    residual: ResidualTarget;
-    exchange: ExchangeTarget;
-}
-
-export interface TerminalParameters {
-    inputs: StagedInput | StagedInput[];
-    account: TerminalAccount;
-}
 
 /**
  * Accumulates one or more transaction nodes into a single {@link LedgerEvent}. Also doubles as the
@@ -48,20 +30,20 @@ export class EventBuilder {
         return [...this.ledger.transactions, ...this._stagedFlat];
     }
 
-    public stageTransaction(spec: StagedTransaction): Transaction {
+    public stageTransaction(stagedTransaction: StagedTransaction): Transaction {
         const view = this.view();
-        const transaction = new Transaction(materializeInputs(spec.inputs, view), materializeOutputs(spec.outputs, view), view);
+        const transaction = new Transaction(materializeInputs(stagedTransaction.inputs, view), materializeOutputs(stagedTransaction.outputs, view), view);
         this.record(transaction);
         return transaction;
     }
 
-    public stageExchange(parameters: ExchangeParameters): ExchangeTransactions {
+    public stageExchange(stagedExchange: StagedExchange): ExchangeTransactions {
         const view = this.view();
         const resolution = new ExchangeResolution(
-            materializeInputs(parameters.fromInputs, view),
-            materializeOutputs(parameters.toOutputs, view),
-            parameters.residual,
-            parameters.exchange,
+            materializeInputs(stagedExchange.fromInputs, view),
+            materializeOutputs(stagedExchange.toOutputs, view),
+            stagedExchange.residual,
+            stagedExchange.exchange,
             view,
             this.ledger.engine
         );
@@ -72,11 +54,11 @@ export class EventBuilder {
         return transactions;
     }
 
-    public stageTerminal(parameters: TerminalParameters): TerminalTransactions {
+    public stageTerminal(stagedTerminal: StagedTerminal): TerminalTransactions {
         const view = this.view();
         const resolution = new TerminalResolution(
-            materializeInputs(parameters.inputs, view),
-            parameters.account,
+            materializeInputs(stagedTerminal.inputs, view),
+            stagedTerminal.account,
             view,
             this.ledger.engine
         );

@@ -1,6 +1,8 @@
 import type { Position } from "./positions.js";
 import type { Result } from "../utils.js";
-import { EventBuilder, LedgerEvent, type ExchangeParameters, type StagedTransaction, type TerminalParameters } from "./event.js";
+import { EventBuilder, LedgerEvent } from "./event.js";
+import { type StagedExchange, type StagedTerminal } from "./transactions/staged.js";
+import { type StagedTransaction } from "./transactions/staged.js";
 import { Transaction } from "./transactions/transaction.js";
 import { materializeInputs, materializeOutputs } from "./transactions/staged.js";
 import type { AccountFolder } from "./accounts/folder.js";
@@ -64,7 +66,7 @@ export class Ledger {
         return event;
     }
 
-    public newExchange(parameters: ExchangeParameters): LedgerEvent {
+    public newExchange(parameters: StagedExchange): LedgerEvent {
         const resolution = new ExchangeResolution(
             materializeInputs(parameters.fromInputs, this.transactions),
             materializeOutputs(parameters.toOutputs, this.transactions),
@@ -82,7 +84,7 @@ export class Ledger {
         return event;
     }
 
-    public newTerminal(parameters: TerminalParameters): LedgerEvent {
+    public newTerminal(parameters: StagedTerminal): LedgerEvent {
         const resolution = new TerminalResolution(
             materializeInputs(parameters.inputs, this.transactions),
             parameters.account,
