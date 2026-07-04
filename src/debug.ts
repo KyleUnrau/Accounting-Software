@@ -8,7 +8,7 @@ import { Ledger, Orientation } from "./ledger-kernel/ledger.js";
 import { AccountFolder } from "./ledger-kernel/accounts/folder.js";
 import { Account } from "./ledger-kernel/accounts/account.js";
 import { Exchange } from "./ledger-kernel/transactions/special-edges/exchange.js";
-import { BookValueEngine } from "./equity-policy/book-value/engine.js";
+import { ProvenanceEngine } from "./equity-policy/provenance/engine.js";
 import { unwind } from "./equity-policy/recaptures.js";
 import { ScenarioLedger } from "./scenarios.js";
 import { ExchangeResolution } from "./equity-policy/exchange.js";
@@ -29,7 +29,7 @@ runCLI({
     Orientation,
     Transaction,
     Exchange,
-    BookValueEngine,
+    ProvenanceEngine,
     ExchangeResolution,
     TerminalResolution,
     scale,

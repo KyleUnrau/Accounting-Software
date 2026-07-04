@@ -1,10 +1,13 @@
 import type { Position } from "./positions.js";
 import type { Result } from "../utils.js";
-import { TransactionGroup } from "./transactions/group.js";
-import { Transaction, type TransactionLike } from "./transactions/transaction.js";
+import { EventBuilder, LedgerEvent, type ExchangeParameters, type StagedTransaction, type TerminalParameters } from "./event.js";
+import { Transaction } from "./transactions/transaction.js";
+import { materializeInputs, materializeOutputs } from "./transactions/staged.js";
 import type { AccountFolder } from "./accounts/folder.js";
 import type { FolderSummary } from "./accounts/summary.js";
-import { EventBuilder, GenerationContext } from "./generation-context.js";
+import { ProvenanceEngine } from "../equity-policy/provenance/engine.js";
+import { ExchangeResolution } from "../equity-policy/exchange.js";
+import { TerminalResolution } from "../equity-policy/terminal.js";
 
 export enum Orientation {
     Positive = 1,
@@ -17,30 +20,82 @@ export enum Orientation {
  * queries and the structural invariant check run through this class.
  */
 export class Ledger {
-    public groups: TransactionGroup[] = [];
+    public events: LedgerEvent[] = [];
 
     /**
      * The flat commit history, in order. Callers (e.g. {@link BookValueEngine}) routinely capture
      * this array once and rely on later commits remaining visible through that same reference —
-     * so this is a single array mutated in place by {@link appendGroup}, not a value recomputed
+     * so this is a single array mutated in place by {@link appendEvent}, not a value recomputed
      * fresh from `groups` on every access.
      */
     public readonly transactions: Transaction[] = [];
 
+    /**
+     * Traces cost basis over the live {@link transactions} history. Constructed once per ledger
+     * (not per call) since `transactions` is mutated in place — the engine sees every later commit
+     * through that same reference, so there is never a need to rebuild it after the fact.
+     */
+    public readonly engine: ProvenanceEngine;
+
     constructor(
         public netAssets: AccountFolder,
         public equity: AccountFolder
-    ) {}
+    ) {
+        this.engine = new ProvenanceEngine(this.transactions);
+    }
 
     public beginEvent(): EventBuilder {
         return new EventBuilder(this);
     }
 
-    /** Registers an already-committed group as a top-level event. Used by {@link record} and {@link EventBuilder}. */
-    public appendGroup(group: TransactionGroup): TransactionGroup {
-        this.groups.push(group);
-        for (const tx of group.flatten()) this.transactions.push(tx);
-        return group;
+    /** Registers an already-built {@link LedgerEvent} as a top-level ledger entry. Used by {@link EventBuilder.register}. */
+    public appendEvent(event: LedgerEvent): LedgerEvent {
+        this.events.push(event);
+        this.transactions.push(...event.flatten());
+        return event;
+    }
+
+    public newTransaction(spec: StagedTransaction): LedgerEvent {
+        const transaction = new Transaction(materializeInputs(spec.inputs, this.transactions), materializeOutputs(spec.outputs, this.transactions), this.transactions);
+        const event = new LedgerEvent([transaction]);
+
+        this.appendEvent(event);
+
+        return event;
+    }
+
+    public newExchange(parameters: ExchangeParameters): LedgerEvent {
+        const resolution = new ExchangeResolution(
+            materializeInputs(parameters.fromInputs, this.transactions),
+            materializeOutputs(parameters.toOutputs, this.transactions),
+            parameters.residual,
+            parameters.exchange,
+            this.transactions,
+            this.engine
+        );
+
+        const transactions = resolution.constructTransactions();
+
+        const event = new LedgerEvent([transactions]);
+        this.appendEvent(event);
+
+        return event;
+    }
+
+    public newTerminal(parameters: TerminalParameters): LedgerEvent {
+        const resolution = new TerminalResolution(
+            materializeInputs(parameters.inputs, this.transactions),
+            parameters.account,
+            this.transactions,
+            this.engine
+        );
+
+        const transactions = resolution.constructTransactions();
+
+        const event = new LedgerEvent([transactions]);
+        this.appendEvent(event);
+
+        return event;
     }
 
     public getSignedBalancesScaled(): Map<Position, bigint> {

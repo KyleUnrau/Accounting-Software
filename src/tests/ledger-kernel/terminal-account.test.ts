@@ -4,8 +4,7 @@ import assert from "node:assert/strict";
 import { TerminalUTXO } from "../../ledger-kernel/transactions/special-edges/terminal.js";
 import { TerminalAccount } from "../../ledger-kernel/accounts/computed.js";
 import { Account } from "../../ledger-kernel/accounts/account.js";
-import { TerminalResolution } from "../../equity-policy/terminal.js";
-import { commitSwap, makeFixture, openInto } from "../utils/ledger-fixture.js";
+import { makeFixture, openInto } from "../utils/ledger-fixture.js";
 
 // A terminal settlement record must never become spendable inventory. These tests pin the
 // *structural* guarantees (not merely convention) that keep terminal value final.
@@ -29,10 +28,11 @@ test("TERM3: an expensed terminal record is committed and counts toward balance,
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    const inputs = f.cash.generateInputs(f.cad, 200, f.ledger.transactions);
-    const resolution = new TerminalResolution(inputs, f.ledger.transactions, f.engine, f.exchangeExpense);
     const event = f.ledger.beginEvent();
-    event.record(resolution.constructTransactions());
+    event.stageTerminal({
+        inputs: { account: f.cash, position: f.cad, quantity: 200 },
+        account: f.exchangeExpense
+    });
     event.register();
 
     assert.ok(f.ledger.verify().ok, "ledger verifies after expensing into a terminal account");

@@ -1,29 +1,31 @@
+import { type Position, assertPositionUnifiromity } from "../../ledger-kernel/positions.js";
+import { type Input, UTXOConsumption, UTXI } from "../../ledger-kernel/transactions/inputs.js";
+import { UTXO, UTXIConsumption } from "../../ledger-kernel/transactions/outputs.js";
+import { type Exchange, ExchangedUTXI } from "../../ledger-kernel/transactions/special-edges/exchange.js";
 import { ResidualUTXI } from "../../ledger-kernel/transactions/special-edges/residual.js";
-import { ExchangedUTXI, type Exchange } from "../../ledger-kernel/transactions/special-edges/exchange.js";
-import { UTXI, UTXOConsumption, type Input } from "../../ledger-kernel/transactions/inputs.js";
-import { UTXIConsumption, UTXO } from "../../ledger-kernel/transactions/outputs.js";
 import type { Transaction } from "../../ledger-kernel/transactions/transaction.js";
-import { assertPositionUnifiromity, type Position } from "../../ledger-kernel/positions.js";
 
-/** A node in the cost basis tree returned by {@link BookValueEngine.compute}. */
+
+/** A node in the cost basis tree returned by {@link ProvenanceEngine.compute}. */
+
 export type BasisPath = OriginPath | ExchangePath | ResidualPath;
-
 /**
  * Terminal node — the basis trace reached a plain {@link UTXI} with no exchange lineage.
  * Represents an opening balance, equity injection, or other unattributed inflow.
  */
+
 export interface OriginPath {
     readonly type: "origin";
     readonly quantity: bigint;
     readonly position: Position;
 }
-
 /**
  * Exchange node — the basis trace crossed an {@link ExchangedUTXI}.
  * `quantity` is the to-side amount attributed to this node; `fromQuantity` is the
  * equivalent from-side amount at the exchange's locked rate; `basis` recurses into
  * the from-side's own lineage.
  */
+
 export interface ExchangePath {
     readonly type: "exchange";
     readonly exchange: Exchange;
@@ -31,7 +33,6 @@ export interface ExchangePath {
     readonly fromQuantity: bigint;
     readonly basis: BasisPath[];
 }
-
 /**
  * Residual node — the basis trace crossed a {@link ResidualUTXI} (deferred residual equity).
  * `quantity` is the surface-position amount attributed to this node; `originBasis` is the
@@ -39,21 +40,22 @@ export interface ExchangePath {
  * lot itself so a consumer can settle (partially close) it. Terminal: a residual does not recurse
  * further — its lineage is captured by `originBasis`.
  */
+
 export interface ResidualPath {
     readonly type: "residual";
     readonly residual: ResidualUTXI;
     readonly quantity: bigint;
     readonly originBasis: Map<Position, bigint>;
 }
-
 /**
  * Traverses the transaction graph to compute the cost basis of a given output quantity
  * back to its origin inputs. Each output is traced through exchanges, residuals, and
  * UTXO consumptions until reaching origin UTXIs, producing a tree of {@link BasisPath} nodes.
  */
-export class BookValueEngine {
-    constructor(private readonly transactions: Transaction[]) {}
-    
+
+export class ProvenanceEngine {
+    constructor(private readonly transactions: Transaction[]) { }
+
     /**
      * Computes the basis paths for a set of consumed `inputs`, tracing each consumed UTXO
      * backwards through the transaction graph until every branch reaches an origin input.
@@ -94,8 +96,8 @@ export class BookValueEngine {
     }
 
     /** Asserts position uniformity across `inputs`, then filters to the {@link UTXOConsumption} `{ source, quantity }` pairs the basis trace operates on. Non-consumption inputs (origin UTXIs, exchange inputs) carry no consumable lineage and are ignored. */
-    private consumedUTXOsFromInputs(inputs: Input[]): { source: UTXO; quantity: bigint }[] {
-        assertPositionUnifiromity({inputs});
+    private consumedUTXOsFromInputs(inputs: Input[]): { source: UTXO; quantity: bigint; }[] {
+        assertPositionUnifiromity({ inputs });
 
         return inputs.filter((i): i is UTXOConsumption => i instanceof UTXOConsumption)
             .map(c => ({ source: c.source, quantity: c.quantity }));
@@ -237,7 +239,7 @@ export class BookValueEngine {
             return [{ type: "origin", quantity, position: input.position } satisfies OriginPath];
         }
 
-        throw new Error(`Unknown input type encountered: ${(input as { type?: unknown }).type}`);
+        throw new Error(`Unknown input type encountered: ${(input as { type?: unknown; }).type}`);
     }
 
     /** Searches the transaction history for the transaction that produced `utxo` by reference equality. */

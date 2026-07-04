@@ -2,27 +2,30 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeFixture, openInto } from "../utils/ledger-fixture.js";
 import { Transaction } from "../../ledger-kernel/transactions/transaction.js";
-import { GenerationContext } from "../../ledger-kernel/generation-context.js";
 import { UTXI, UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { UTXO } from "../../ledger-kernel/transactions/outputs.js";
 
-test("a generation session keeps lot availability accurate across multiple draws", () => {
+test("materializing multiple staged inputs in one transaction keeps lot availability accurate across draws", () => {
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    const generation = new GenerationContext(f.ledger.transactions);
+    const event = f.ledger.beginEvent();
 
-    // First draw consumes the whole committed 1000 lot.
-    const first = generation.generateInputs(f.cash, f.cad, 1000);
-    assert.equal(first.length, 1);
-    assert.ok(first[0] instanceof UTXOConsumption, "first draw should consume the committed UTXO lot");
-
-    // Second draw must see cash as exhausted (the first draw is staged) and mint a remainder UTXI
+    // Two staged draws on the same account + position in one transaction: the first consumes the
+    // whole committed 1000 lot, so the second must see cash as exhausted and mint a remainder UTXI
     // instead of double-drawing the already-spent lot.
-    const second = generation.generateInputs(f.cash, f.cad, 50);
-    assert.equal(second.length, 1);
-    assert.ok(second[0] instanceof UTXI, "second draw must mint a remainder UTXI, not re-consume the spent lot");
-    assert.equal((second[0] as UTXI).quantity, 5000n, "remainder must be the full 50 CAD (5000 in cents)");
+    const transaction = event.stageTransaction({
+        inputs: [
+            { account: f.cash, position: f.cad, quantity: 1000 },
+            { account: f.cash, position: f.cad, quantity: 50 }
+        ],
+        outputs: { account: f.drawings, position: f.cad, quantity: 1050 }
+    });
+
+    assert.equal(transaction.inputs.length, 2);
+    assert.ok(transaction.inputs[0] instanceof UTXOConsumption, "first draw should consume the committed UTXO lot");
+    assert.ok(transaction.inputs[1] instanceof UTXI, "second draw must mint a remainder UTXI, not re-consume the spent lot");
+    assert.equal((transaction.inputs[1] as UTXI).quantity, 5000n, "remainder must be the full 50 CAD (5000 in cents)");
 });
 
 test("Transaction.verify throws when two consumptions over-draw the same lot", () => {

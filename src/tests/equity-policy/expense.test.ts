@@ -1,16 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { TerminalResolution } from "../../equity-policy/terminal.js";
 import { commitSwap, makeFixture, openInto } from "../utils/ledger-fixture.js";
+import type { Account } from "../../ledger-kernel/accounts/account.js";
+import type { Position } from "../../ledger-kernel/positions.js";
 
 // Commits an expense end to end: the consuming/surface transaction plus the hop and
 // expense-recognition transactions the resolution emits.
-function commitExpense(f: ReturnType<typeof makeFixture>, inputs: ReturnType<typeof f.cash.generateInputs>) {
-    const resolution = new TerminalResolution(inputs, f.ledger.transactions, f.engine, f.exchangeExpense);
+function commitExpense(f: ReturnType<typeof makeFixture>, account: Account, position: Position, quantity: number) {
     const event = f.ledger.beginEvent();
-    event.record(resolution.constructTransactions());
+    const transactions = event.stageTerminal({
+        inputs: { account, position, quantity },
+        account: f.exchangeExpense
+    });
     event.register();
-    return resolution;
+    return transactions.resolution;
 }
 
 test("expensing forward-exchanged value recaptures the edge and recognizes the basis at origin", () => {
@@ -19,8 +22,7 @@ test("expensing forward-exchanged value recaptures the edge and recognizes the b
     commitSwap(f, f.cash, f.cad, 500, f.cash, f.usd, 375, f.cadToUsd); // 500 CAD → 375 USD (forward)
 
     // Expense the 375 USD entirely; its basis fully unwinds to the 500 CAD origin.
-    const inputs = f.cash.generateInputs(f.usd, 375, f.ledger.transactions);
-    commitExpense(f, inputs);
+    commitExpense(f, f.cash, f.usd, 375);
 
     assert.ok(f.ledger.verify().ok, "ledger must verify after expensing");
 
@@ -43,8 +45,7 @@ test("expensing multi-hop value threads intermediate positions through hop trans
     commitSwap(f, f.cash, f.usd, 375, f.inventory, f.oranges, 1500, f.usdToOranges);
 
     // Expense the 1500 oranges; provenance unwinds Oranges → USD → CAD across two exchanges.
-    const inputs = f.inventory.generateInputs(f.oranges, 1500, f.ledger.transactions);
-    commitExpense(f, inputs);
+    commitExpense(f, f.inventory, f.oranges, 1500);
 
     assert.ok(f.ledger.verify().ok, "ledger must verify after a multi-hop expense");
 
@@ -67,8 +68,7 @@ test("expensing residual-derived value closes the residual leg and recognizes it
     commitSwap(f, f.cash, f.usd, 750, f.cash, f.cad, 1100, f.usdToCad);    // close loop: 100 CAD gain, 0.001 BTC basis
 
     // Cash holds 1100 CAD = 1000 recovered (BTC-derived) + 100 residual-derived (gain). Expense it all.
-    const inputs = f.cash.generateInputs(f.cad, 1100, f.ledger.transactions);
-    const resolution = commitExpense(f, inputs);
+    const resolution = commitExpense(f, f.cash, f.cad, 1100);
 
     assert.ok(f.ledger.verify().ok, "ledger must verify after expensing residual-derived value");
 

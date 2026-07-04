@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { collectOriginLeaves } from "../../equity-policy/book-value/lineage.js";
-import { ExchangeResolution } from "../../equity-policy/exchange.js";
+import { collectOriginLeaves } from "../../equity-policy/provenance/graph-traversal.js";
 import { UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { makeFixture, openInto, commitSwap } from "../utils/ledger-fixture.js";
 
@@ -84,14 +83,15 @@ test("a partial exchange resolves only its portion; the rest is an independent t
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    // Exchange 400 of the 1000 CAD into 300 USD via the resolution layer (separate transactions).
-    const exchangedInputs = f.cash.generateInputs(f.cad, 400, f.ledger.transactions);
-    const toOutputs = f.cash.generateOutputs(f.usd, 300, f.ledger.transactions);
-    const res = new ExchangeResolution(exchangedInputs, toOutputs, f.ledger.transactions,
-                                       f.engine, { gain: f.capitalGains, loss: f.capitalLosses }, f.cadToUsd);
-
     const event = f.ledger.beginEvent();
-    event.record(res.constructTransactions());
+
+    // Exchange 400 of the 1000 CAD into 300 USD via the resolution layer (separate transactions).
+    const res = event.stageExchange({
+        fromInputs: { account: f.cash, position: f.cad, quantity: 400 },
+        toOutputs: { account: f.cash, position: f.usd, quantity: 300 },
+        residual: { gain: f.capitalGains, loss: f.capitalLosses },
+        exchange: f.cadToUsd
+    }).resolution;
 
     // The forward exchange links ONLY the exchanged 400 CAD ↔ 300 USD.
     assert.notEqual(res.exchange, null);
@@ -99,9 +99,9 @@ test("a partial exchange resolves only its portion; the rest is an independent t
     assert.equal(res.exchange!.to.quantity, 30000n);
 
     // Withdraw the remaining 100 CAD as a fully independent transaction (its own input→output flow).
-    event.newTransaction({
-        inputs: f.cash.generateInputs(f.cad, 100, event.view()),
-        outputs: f.drawings.generateOutputs(f.cad, 100, event.view()),
+    event.stageTransaction({
+        inputs: { account: f.cash, position: f.cad, quantity: 100 },
+        outputs: { account: f.drawings, position: f.cad, quantity: 100 }
     });
     event.register();
 

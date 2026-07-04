@@ -1,5 +1,5 @@
-import { BookValueEngine } from "../../equity-policy/book-value/engine.js";
-import { ExchangeResolution } from "../../equity-policy/exchange.js";
+import { ProvenanceEngine } from "../../equity-policy/provenance/engine.js";
+import type { ExchangeResolution } from "../../equity-policy/exchange.js";
 import type { HopTransaction } from "../../equity-policy/recaptures.js";
 import type { Account } from "../../ledger-kernel/accounts/account.js";
 import type { ResidualAccount, ExchangeAccount, TerminalAccount } from "../../ledger-kernel/accounts/computed.js";
@@ -20,7 +20,7 @@ export interface Fixture {
     oranges: Position;
     btc: Position;
     ledger: Ledger;
-    engine: BookValueEngine;
+    engine: ProvenanceEngine;
     cash: Account;
     inventory: Account;
     wallet: Account;
@@ -49,7 +49,7 @@ export function makeFixture(): Fixture {
     const netAssets = new AccountFolder("Net Assets", Orientation.Positive);
     const equity = new AccountFolder("Net Worth", Orientation.Negative);
     const ledger = new Ledger(netAssets, equity);
-    const engine = new BookValueEngine(ledger.transactions);
+    const engine = ledger.engine;
 
     const assets = netAssets.addFolder("Assets", Orientation.Positive);
     const currentAssets = assets.addFolder("Current Assets", Orientation.Positive);
@@ -83,9 +83,9 @@ export function makeFixture(): Fixture {
 /** Commits an opening-balance credit of `value` units of `position` into `cash`. */
 export function openInto(f: Fixture, account: Account, position: Position, value: number): void {
     const event = f.ledger.beginEvent();
-    event.newTransaction({
-        inputs: f.openingBalance.generateInputs(position, value, f.ledger.transactions),
-        outputs: account.generateOutputs(position, value, f.ledger.transactions),
+    event.stageTransaction({
+        inputs: { account: f.openingBalance, position, quantity: value },
+        outputs: { account, position, quantity: value }
     });
     event.register();
 }
@@ -106,17 +106,14 @@ export function commitSwap(
     toAccount: Account, toPosition: Position, proceeds: number,
     exchangeAccount: ExchangeAccount
 ): SwapResult {
-    const fromInputs = fromAccount.generateInputs(fromPosition, quantity, f.ledger.transactions);
-    const toOutputs = toAccount.generateOutputs(toPosition, proceeds, f.ledger.transactions);
-
-    const resolution = new ExchangeResolution(
-        fromInputs, toOutputs, f.ledger.transactions,
-        f.engine, { gain: f.capitalGains, loss: f.capitalLosses }, exchangeAccount
-    );
-
     const event = f.ledger.beginEvent();
-    event.record(resolution.constructTransactions());
+    const transactions = event.stageExchange({
+        fromInputs: { account: fromAccount, position: fromPosition, quantity },
+        toOutputs: { account: toAccount, position: toPosition, quantity: proceeds },
+        residual: { gain: f.capitalGains, loss: f.capitalLosses },
+        exchange: exchangeAccount
+    });
     event.register();
 
-    return { resolution, intermediates: resolution.getRecaptureHops() };
+    return { resolution: transactions.resolution, intermediates: transactions.resolution.getRecaptureHops() };
 }

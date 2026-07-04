@@ -3,9 +3,9 @@ import type { Transaction } from "../ledger-kernel/transactions/transaction.js";
 import type { Exchange } from "../ledger-kernel/transactions/special-edges/exchange.js";
 import type { Input, UTXOConsumption } from "../ledger-kernel/transactions/inputs.js";
 import type { Output, UTXIConsumption } from "../ledger-kernel/transactions/outputs.js";
-import { collectChainEdges, groupRecapturesByExchange, collectResidualNodes, collectCarryBacks } from "./book-value/lineage.js";
-import type { ResidualCarryBack } from "./book-value/lineage.js";
-import type { BasisPath, BookValueEngine, ResidualPath } from "./book-value/engine.js";
+import { collectChainEdges, groupRecapturesByExchange, collectResidualNodes, collectCarryBacks } from "./provenance/graph-traversal.js";
+import type { ResidualCarryBack } from "./provenance/graph-traversal.js";
+import type { BasisPath, ProvenanceEngine, ResidualPath } from "./provenance/engine.js";
 
 /** A single-position settlement transaction emitted as part of a multi-hop unwind. */
 export interface HopTransaction {
@@ -41,7 +41,7 @@ export interface UnwindPlan {
  * Unwinds a consumed basis tree into a recapture plan. See {@link collectChainEdges} for the
  * loop-vs-forward and full-unwind semantics.
  *
- * @param basis - The basis tree of the consumed value (from {@link BookValueEngine.compute}).
+ * @param basis - The basis tree of the consumed value (from {@link ProvenanceEngine.compute}).
  * @param stopAt - The proceeds/target position for loop mode, or `null` for a full unwind to origin.
  */
 export function unwind(basis: BasisPath[], stopAt: Position | null): UnwindPlan {

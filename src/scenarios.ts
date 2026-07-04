@@ -1,27 +1,23 @@
-import { BookValueEngine } from "./equity-policy/book-value/engine.js";
-import { ExchangeResolution } from "./equity-policy/exchange.js";
-import { TerminalResolution } from "./equity-policy/terminal.js";
-import type { Account } from "./ledger-kernel/accounts/account.js";
+import { ProvenanceEngine } from "./equity-policy/provenance/engine.js";
 import { AccountFolder } from "./ledger-kernel/accounts/folder.js";
 import { fifo } from "./ledger-kernel/disposal-methods/basic-fifo.js";
 import { Ledger, Orientation } from "./ledger-kernel/ledger.js";
-import { TransactionGroup } from "./ledger-kernel/transactions/group.js";
+import type { LedgerEvent } from "./ledger-kernel/event.js";
 import type { Position } from "./ledger-kernel/positions.js";
 import type { UTXI } from "./ledger-kernel/transactions/inputs.js";
 import type { UTXO } from "./ledger-kernel/transactions/outputs.js";
-import { GenerationContext } from "./ledger-kernel/generation-context.js";
 
 /**
  * A self-contained, serialization-ready handle on a ledger for the explorer. Bundles the
- * {@link Ledger} (which owns the transaction history) with the live {@link BookValueEngine}
+ * {@link Ledger} (which owns the transaction history) with the live {@link ProvenanceEngine}
  * and the list of {@link Position}s that appear in the book. The server reads — never mutates —
  * this view, and builds fresh per-slice engines for as-of basis queries.
  */
 export interface LedgerView {
     ledger: Ledger;
-    engine: BookValueEngine;
+    engine: ProvenanceEngine;
     positions: Position[];
-    events: TransactionGroup[];
+    events: LedgerEvent[];
 }
 
 export namespace ScenarioLedger {
@@ -68,6 +64,7 @@ export namespace ScenarioLedger {
         const transfersTo = netTransfers.addFolder("Transfers To", Orientation.Negative);
         const toA = transfersTo.addExchangeAccount("Transfers to A", Orientation.Positive);
         const toB = transfersTo.addExchangeAccount("Transfers to B", Orientation.Positive);
+        const toC = transfersTo.addExchangeAccount("Transfers to C", Orientation.Positive);
 
         const netIncome = equity.addFolder("Net Income", Orientation.Positive);
         const revenues = netIncome.addFolder("Revenues", Orientation.Positive);
@@ -114,6 +111,7 @@ export namespace ScenarioLedger {
             transfersTo,
             toA,
             toB,
+            toC,
 
             netIncome,
             revenues,
@@ -131,99 +129,31 @@ export namespace ScenarioLedger {
     export const accounts = generateAccounts();
 
     export const ledger: Ledger = new Ledger(accounts.netAssets, accounts.equity);
-    export const engine = new BookValueEngine(ledger.transactions);
+    export const engine = ledger.engine;
 
     export const events: Record<string, () => any> = {
-        event0: () => {
+        event0: (): LedgerEvent => ledger.newTransaction({
+            inputs: {position: positions.a, account: accounts.openingBalance, quantity: 1000},
+            outputs: {position: positions.a, account: accounts.cash, quantity: 1000}
+        }),
+        event1: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.a, account: accounts.cash, quantity: 500},
+            toOutputs: {position: positions.b, account: accounts.cash, quantity: 250},
+            residual: accounts.residualA,
+            exchange: {from: accounts.toB, to: accounts.fromA}
+        }),
+        event2: (): LedgerEvent => {
             const event = ledger.beginEvent();
-            event.context.generateInputs(accounts.openingBalance, positions.a, 1000);
-            event.context.generateOutputs(accounts.cash, positions.a, 1000);
-            event.newTransaction(event.context);
-            return event.register();
-        },
-        event1: () => {
-            const event = ledger.beginEvent();
-            const fromInputs = event.context.generateInputs(accounts.cash, positions.a, 500);
-            const toOutputs = event.context.generateOutputs(accounts.cash, positions.b, 250);
-            const exchange = new ExchangeResolution(
-                fromInputs,
-                toOutputs,
-                event.view(),
-                engine,
-                accounts.residualA,
-                {from: accounts.toB, to: accounts.fromA}
-            );
-
-            event.record(exchange.constructTransactions());
-            return event.register();
-        },
-        event2: () => {
-            const event = ledger.beginEvent();
-            const fromInputs = event.context.generateInputs(accounts.cash, positions.b, 250);
-            const toOutputs = event.context.generateOutputs(accounts.cash, positions.a, 550);
-            const exchange = new ExchangeResolution(
-                fromInputs,
-                toOutputs,
-                event.view(),
-                engine,
-                accounts.residualB,
-                {from: accounts.toA, to: accounts.fromB}
-            );
-
-            event.record(exchange.constructTransactions());
-            return event.register();
-        },
-        event3: () => {
-            const event = ledger.beginEvent();
-            const fromInputs = event.context.generateInputs(accounts.cash, positions.a, 500);
-            const toOutputs = event.context.generateOutputs(accounts.cash, positions.b, 250);
-            const exchange = new ExchangeResolution(
-                fromInputs,
-                toOutputs,
-                event.view(),
-                engine,
-                accounts.residualA,
-                {from: accounts.toB, to: accounts.fromA}
-            );
-
-            event.record(exchange.constructTransactions());
-            return event.register();
-        },
-        event4: () => {
-            const event = ledger.beginEvent();
-            event.context.generateInputs(accounts.accountsPayable, positions.b, 250);
-            event.context.generateOutputs(accounts.cash, positions.b, 250);
-            event.newTransaction(event.context);
-            return event.register();
-        },
-        event5: () => {
-            const event = ledger.beginEvent();
-            const fromInputs = event.context.generateInputs(accounts.cash, positions.b, 500);
-            const toOutputs = event.context.generateOutputs(accounts.cash, positions.a, 900);
-            const exchange = new ExchangeResolution(
-                fromInputs,
-                toOutputs,
-                event.view(),
-                engine,
-                accounts.residualB,
-                {from: accounts.toA, to: accounts.fromB}
-            );
-
-            event.record(exchange.constructTransactions());
-            return event.register();
-        },
-        event6: () => {
-            const event = ledger.beginEvent();
-            const exchange = new ExchangeResolution(
-                event.context.generateInputs(accounts.cash, positions.a, 1450),
-                event.context.generateOutputs(accounts.cash, positions.b, 725),
-                event.view(),
-                engine,
-                accounts.residualA,
-                {from: accounts.toB, to: accounts.fromA}
-            );
-
-            event.record(exchange.constructTransactions());
+            event.stageTerminal({
+                inputs: {position: positions.b, account: accounts.cash, quantity: 50},
+                account: accounts.exchangeExpense
+            });
+            event.stageExchange({
+                fromInputs: {position: positions.b, account: accounts.cash, quantity: 200},
+                toOutputs: {position: positions.c, account: accounts.inventory, quantity: 2000},
+                residual: accounts.residualB,
+                exchange: {from: accounts.toC, to: accounts.fromB}
+            });
             return event.register();
         }
     }

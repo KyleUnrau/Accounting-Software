@@ -2,28 +2,15 @@ import type { Result } from "../../utils.js";
 import type { Position } from "../positions.js";
 import { type Input, UTXI, UTXOConsumption } from "./inputs.js";
 import { type Output, UTXO, UTXIConsumption } from "./outputs.js";
-import type { TransactionMaterial } from "./material.js";
+import { TransactionNode } from "./node.js";
 
-
-/**
- * The minimal, structural shape of a transaction needed to compute lot availability — just
- * the `inputs` and `outputs` lists. {@link Transaction} implements it, but a provisional,
- * unverified `{ inputs, outputs }` record can also stand in. This lets generation account for
- * pending-but-not-yet-committed consumptions (see {@link GenerationContext}) without
- * constructing a real {@link Transaction}, which would require a balanced set of entries.
- */
 
 export interface TransactionLike {
     inputs: Input[];
     outputs: Output[];
 }
-/**
- * An atomic, single-position accounting record. Enforces two structural invariants
- * at construction time — all inputs and outputs must share the same {@link Position},
- * and `sum(inputs) === sum(outputs)`. Throws immediately if either is violated.
- */
 
-export class Transaction implements TransactionLike, TransactionMaterial {
+export class Transaction extends TransactionNode implements TransactionLike {
     public position: Position;
 
     public inputs: Input[];
@@ -36,6 +23,7 @@ export class Transaction implements TransactionLike, TransactionMaterial {
         outputs: Output[],
         transactions: Transaction[]
     ) {
+        super();
         const verification: Result<Position, Error> = this.verify(inputs, outputs, transactions);
         if (!verification.ok) throw verification.error;
 

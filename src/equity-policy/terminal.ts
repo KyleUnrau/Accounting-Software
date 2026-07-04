@@ -3,11 +3,11 @@ import { type Position, assertPositionUnifiromity } from "../ledger-kernel/posit
 import { sumNodeQuantityScaled } from "../ledger-kernel/transactions/utils.js";
 import { TransactionGroup, OrderedTransactionGroup } from "../ledger-kernel/transactions/group.js";
 import { Transaction } from "../ledger-kernel/transactions/transaction.js";
-import type { TransactionMaterial, TransactionMaterialFactory } from "../ledger-kernel/transactions/material.js";
+import type { TransactionNode, TransactionNodeFactory } from "../ledger-kernel/transactions/node.js";
 import type { ResidualUTXI } from "../ledger-kernel/transactions/special-edges/residual.js";
 import type { Input } from "../ledger-kernel/transactions/inputs.js";
 import type { Output } from "../ledger-kernel/transactions/outputs.js";
-import type { BookValueEngine } from "./book-value/engine.js";
+import type { ProvenanceEngine } from "./provenance/engine.js";
 import { type Recapture, type HopTransaction, unwind, classifyRecaptures, executeRecaptures, type RecaptureClassification, type UnwindPlan } from "./recaptures.js";
 
 
@@ -37,19 +37,19 @@ export class TerminalTransactions extends TransactionGroup {
     ) {
         super();
         // Commit order: consuming transaction first, then intermediate hops, then terminal recognitions.
-        const result: TransactionMaterial[] = [this.from];
+        const result: TransactionNode[] = [this.from];
         if (!this.intermediates.isEmpty) result.push(this.intermediates);
         if (!this.externalTerminals.isEmpty) result.push(this.externalTerminals);
         this._members = result;
     }
 
-    private readonly _members: readonly TransactionMaterial[];
+    private readonly _members: readonly TransactionNode[];
 
     /**
      * Ordered members of this terminal bundle. Empty role-groups (no hops, no external
      * recognitions) are omitted so callers see only the meaningful parts.
      */
-    public get members(): readonly TransactionMaterial[] {
+    public get members(): readonly TransactionNode[] {
         return this._members;
     }
 }
@@ -80,7 +80,7 @@ export class TerminalTransactions extends TransactionGroup {
  * are available), then the terminal recognitions.
  */
 
-export class TerminalResolution implements TransactionMaterialFactory<TerminalTransactions> {
+export class TerminalResolution implements TransactionNodeFactory<TerminalTransactions> {
     /** One group per terminal-origin position recovered by the unwind; each drives one recognition transaction. */
     public readonly recaptureGroups: TerminalRecapturedGroup[];
     /** Surface-position portions with no exchange lineage; recognized directly in the consuming transaction. */
@@ -103,9 +103,9 @@ export class TerminalResolution implements TransactionMaterialFactory<TerminalTr
 
     constructor(
         public readonly inputs: Input[],
+        public readonly account: TerminalAccount,
         private readonly transactions: Transaction[],
-        engine: BookValueEngine,
-        private readonly account: TerminalAccount
+        engine: ProvenanceEngine
     ) {
         this.fromPosition = assertPositionUnifiromity({ inputs });
         const totalConsumed = sumNodeQuantityScaled(inputs);

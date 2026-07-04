@@ -1,9 +1,9 @@
-import type { BookValueEngine } from "./book-value/engine.js";
+import type { ProvenanceEngine } from "./provenance/engine.js";
 import { assertPositionUnifiromity, type Position } from "../ledger-kernel/positions.js";
 import { splitInputs, sumNodeQuantityScaled } from "../ledger-kernel/transactions/utils.js";
 import { Transaction } from "../ledger-kernel/transactions/transaction.js";
 import { TransactionGroup, OrderedTransactionGroup } from "../ledger-kernel/transactions/group.js";
-import type { TransactionMaterial, TransactionMaterialFactory } from "../ledger-kernel/transactions/material.js";
+import type { TransactionNode, TransactionNodeFactory } from "../ledger-kernel/transactions/node.js";
 import { ResidualUTXI } from "../ledger-kernel/transactions/special-edges/residual.js";
 import { Exchange, type ExchangeTarget } from "../ledger-kernel/transactions/special-edges/exchange.js";
 import { type Input } from "../ledger-kernel/transactions/inputs.js";
@@ -11,7 +11,7 @@ import { type Output } from "../ledger-kernel/transactions/outputs.js";
 import { classifyRecaptures, executeRecaptures, unwind, type Recapture } from "./recaptures.js";
 import { gainAccountOf, lossAccountOf, type ResidualTarget } from "../ledger-kernel/accounts/computed.js";
 import { type HopTransaction } from "./recaptures.js";
-import { collectOriginLeaves, forwardSurfaceQuantity, type ResidualCarryBack } from "./book-value/lineage.js";
+import { collectOriginLeaves, forwardSurfaceQuantity, type ResidualCarryBack } from "./provenance/graph-traversal.js";
 import { TerminalResolution, TerminalTransactions } from "./terminal.js";
 
 interface ResidualSettlement {
@@ -82,15 +82,15 @@ export class ExchangeTransactions extends TransactionGroup {
         // This is an existing ledger-history convention verified by tests. The intermediate hops do not
         // depend on `to` being committed first (both consume pre-existing lots from committed history),
         // but the ordering must not be changed silently — tests explicitly assert it.
-        const result: TransactionMaterial[] = [this.from, this.to];
+        const result: TransactionNode[] = [this.from, this.to];
         if (!this.intermediates.isEmpty) result.push(this.intermediates);
         if (this.terminalLoss) result.push(this.terminalLoss);
         this._members = result;
     }
 
-    private readonly _members: readonly TransactionMaterial[];
+    private readonly _members: readonly TransactionNode[];
 
-    public get members(): readonly TransactionMaterial[] {
+    public get members(): readonly TransactionNode[] {
         return this._members;
     }
 }
@@ -122,7 +122,7 @@ export type { ExchangeTarget };
  * loss on the reclaims (rather than the surface) keeps any carry-back/forward surface intact even
  * when a single consumed lot blends loop capital with residual-derived value.
  */
-export class ExchangeResolution implements TransactionMaterialFactory<ExchangeTransactions> {
+export class ExchangeResolution implements TransactionNodeFactory<ExchangeTransactions> {
     /** Forward exchange at the actual proceeds rate; null when all consumed value looped or was residual-derived. */
     public readonly exchange: Exchange | null;
     /** Gain residuals (`ResidualUTXI`) recognized in the target on the recovered loop; losses are terminal (see {@link terminalLoss}). */
@@ -149,11 +149,11 @@ export class ExchangeResolution implements TransactionMaterialFactory<ExchangeTr
 
     constructor(
         public readonly fromInputs: Input[],
-        private readonly toOutputs: Output[],
+        public readonly toOutputs: Output[],
+        public readonly residualTarget: ResidualTarget,
+        public readonly exchangeAccount: ExchangeTarget,
         private readonly transactions: Transaction[],
-        engine: BookValueEngine,
-        residualTarget: ResidualTarget,
-        exchangeAccount: ExchangeTarget
+        engine: ProvenanceEngine
     ) {
         this.fromPosition = assertPositionUnifiromity({inputs: fromInputs});
         this.toPosition = assertPositionUnifiromity({outputs: toOutputs});
@@ -183,7 +183,7 @@ export class ExchangeResolution implements TransactionMaterialFactory<ExchangeTr
             const [lostReclaims, keptReclaims] = this.prorateReclaimLoss(targetReclaims, loss);
             this.keptTargetReclaims = keptReclaims;
             this.terminalLoss = lostReclaims.length > 0
-                ? new TerminalResolution(lostReclaims, transactions, engine, lossAccountOf(residualTarget))
+                ? new TerminalResolution(lostReclaims, lossAccountOf(residualTarget), transactions, engine)
                 : null;
         } else {
             this.keptTargetReclaims = null;
@@ -213,7 +213,7 @@ export class ExchangeResolution implements TransactionMaterialFactory<ExchangeTr
     private computeRecaptureResolution(
         fromInputs: Input[],
         toPosition: Position,
-        engine: BookValueEngine
+        engine: ProvenanceEngine
     ): ExchangeRecaptureResolution {
         const surfacePosition = assertPositionUnifiromity(fromInputs);
         const fromQuantity = sumNodeQuantityScaled(fromInputs);

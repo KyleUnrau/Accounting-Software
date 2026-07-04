@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeFixture, openInto } from "../utils/ledger-fixture.js";
+import { Transaction } from "../../ledger-kernel/transactions/transaction.js";
 
 test("generated lots only affect balances once their transaction is committed", () => {
     const f = makeFixture();
@@ -18,9 +19,9 @@ test("generated lots only affect balances once their transaction is committed", 
     assert.ok(f.ledger.verify().ok, "ledger must still verify with an uncommitted lot outstanding");
 
     // Committing it inside a balanced transaction makes it count.
-    const equityInputs = f.openingBalance.generateInputs(f.cad, 750, f.ledger.transactions);
     const event = f.ledger.beginEvent();
-    event.newTransaction({ inputs: equityInputs, outputs: receipt });
+    const equityInputs = f.openingBalance.generateInputs(f.cad, 750, event.view());
+    event.record(new Transaction(equityInputs, receipt, event.view()));
     event.register();
 
     assert.equal(f.cash.getBalance(f.cad, f.ledger.transactions), 1750, "committed receipt now counts");

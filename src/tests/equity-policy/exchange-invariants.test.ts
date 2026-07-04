@@ -5,7 +5,7 @@ import { UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { UTXO } from "../../ledger-kernel/transactions/outputs.js";
 import { ResidualUTXI } from "../../ledger-kernel/transactions/special-edges/residual.js";
 import { assertPositionUnifiromity, type Position } from "../../ledger-kernel/positions.js";
-import { collectOriginLeaves } from "../../equity-policy/book-value/lineage.js";
+import { collectOriginLeaves } from "../../equity-policy/provenance/graph-traversal.js";
 import { TerminalResolution } from "../../equity-policy/terminal.js";
 import { commitSwap, makeFixture, openInto, type Fixture } from "../utils/ledger-fixture.js";
 
@@ -435,10 +435,11 @@ test("INV5f: expensing forward-exchanged value terminalizes only the forward edg
 
     // event3a: expense 50 A (drawn from the origin-A leftover, no residual lineage).
     {
-        const inputs = f.cash.generateInputs(f.cad, 50, f.ledger.transactions);
-        const res = new TerminalResolution(inputs, f.ledger.transactions, f.engine, f.exchangeExpense);
         const ev = f.ledger.beginEvent();
-        ev.record(res.constructTransactions());
+        ev.stageTerminal({
+            inputs: { account: f.cash, position: f.cad, quantity: 50 },
+            account: f.exchangeExpense
+        });
         ev.register();
     }
 
@@ -451,8 +452,9 @@ test("INV5f: expensing forward-exchanged value terminalizes only the forward edg
     assert.equal(f.capitalGains.getSignedBalanceScaled(f.usd, f.ledger.transactions), 0n, "no gain re-anchored to B by event3");
 
     // event4: expense 200 B. Its basis traces to 400 A through the event3 forward edge (1000 A ↔ 500 B).
-    const inputs = f.cash.generateInputs(f.usd, 200, f.ledger.transactions);
-    const res = new TerminalResolution(inputs, f.ledger.transactions, f.engine, f.rentExpense);
+    const ev = f.ledger.beginEvent();
+    const inputs = f.cash.generateInputs(f.usd, 200, ev.view());
+    const res = new TerminalResolution(inputs, f.rentExpense, ev.view(), f.engine);
 
     // (Q11/symptom) No residual leg is closed and nothing is re-recognized just because B is expensed.
     assert.equal(res.residualCloseOutputs.length, 0, "no residual leg closed by expensing B");
@@ -471,7 +473,6 @@ test("INV5f: expensing forward-exchanged value terminalizes only the forward edg
             "every constructed terminal transaction must be single-position",
         );
 
-    const ev = f.ledger.beginEvent();
     ev.record(built!);
     ev.register();
 

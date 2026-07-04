@@ -1,6 +1,8 @@
 import { type Position, formatQuantity, unscale } from "../../ledger-kernel/positions.js";
 import { Transaction } from "../../ledger-kernel/transactions/transaction.js";
 import { TransactionGroup } from "../../ledger-kernel/transactions/group.js";
+import type { TransactionNode } from "../../ledger-kernel/transactions/node.js";
+import type { LedgerEvent } from "../../ledger-kernel/event.js";
 import { UTXI, UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { UTXO, UTXIConsumption } from "../../ledger-kernel/transactions/outputs.js";
 import { ResidualUTXI } from "../../ledger-kernel/transactions/special-edges/residual.js";
@@ -13,8 +15,8 @@ import { Account } from "../../ledger-kernel/accounts/account.js";
 import { AccountFolder } from "../../ledger-kernel/accounts/folder.js";
 import { ResidualAccount, ExchangeAccount, TerminalAccount } from "../../ledger-kernel/accounts/computed.js";
 import type { AccountNode } from "../../ledger-kernel/accounts/node.js";
-import { BookValueEngine, type BasisPath } from "../../equity-policy/book-value/engine.js";
-import { collectOriginLeaves } from "../../equity-policy/book-value/lineage.js";
+import { ProvenanceEngine, type BasisPath } from "../../equity-policy/provenance/engine.js";
+import { collectOriginLeaves } from "../../equity-policy/provenance/graph-traversal.js";
 import { Registry, type LotLike } from "./registry.js";
 import type { LedgerView } from "../../scenarios.js";
 
@@ -174,14 +176,26 @@ function accountDTO(node: AccountNode, reg: Registry, slice: Transaction[]): Dic
 
 // --- group tree -----------------------------------------------------------------------------
 
+/** Serializes a single {@link TransactionNode} member into a leaf tx index or a nested group. */
+function serializeNode(node: TransactionNode, txIndex: Map<Transaction, number>): Dict {
+    return node instanceof TransactionGroup
+        ? { group: serializeGroup(node, txIndex) }
+        : { txIndex: node instanceof Transaction ? txIndex.get(node) ?? null : null };
+}
+
 /** Serializes a {@link TransactionGroup} into its leaf tx indices and members (leaf tx indices or nested groups). */
 function serializeGroup(group: TransactionGroup, txIndex: Map<Transaction, number>): Dict {
     return {
         txIndices: group.flatten().map(tx => txIndex.get(tx) ?? null),
-        members: group.members.map((member): Dict =>
-            member instanceof TransactionGroup
-                ? { group: serializeGroup(member, txIndex) }
-                : { txIndex: member instanceof Transaction ? txIndex.get(member) ?? null : null }),
+        members: group.members.map(member => serializeNode(member, txIndex)),
+    };
+}
+
+/** Serializes a top-level {@link LedgerEvent} the same way as a group, for the timeline's `groups` field. */
+function serializeEvent(event: LedgerEvent, txIndex: Map<Transaction, number>): Dict {
+    return {
+        txIndices: event.flatten().map(tx => txIndex.get(tx) ?? null),
+        members: event.members.map(member => serializeNode(member, txIndex)),
     };
 }
 
@@ -222,7 +236,7 @@ export function buildState(view: LedgerView, reg: Registry, upToRaw: number | un
             accountDTO(view.ledger.equity, reg, slice),
         ],
         transactions: timeline,
-        groups: view.ledger.groups.map(group => serializeGroup(group, txIndex)),
+        groups: view.ledger.events.map(event => serializeEvent(event, txIndex)),
     };
 }
 
@@ -237,7 +251,7 @@ export function buildTransaction(view: LedgerView, reg: Registry, index: number,
 
     // Provenance must see at least through this transaction so ancestor producers resolve.
     const basisSlice = transactions.slice(0, Math.max(upTo, index + 1));
-    const engine = new BookValueEngine(basisSlice);
+    const engine = new ProvenanceEngine(basisSlice);
 
     let provenance: Dict;
     try {
@@ -306,7 +320,7 @@ export function buildLot(view: LedgerView, reg: Registry, id: string, upToRaw: n
     if (lot instanceof ResidualUTXI) dto.originBasis = originBasisDTO(lot.originBasis);
 
     // Basis trace: trace UTXO-side lots directly; for the UTXI side, trace the exchange's from-side.
-    const engine = new BookValueEngine(transactions);
+    const engine = new ProvenanceEngine(transactions);
     try {
         let basis: BasisPath[] | null = null;
         if (lot instanceof UTXO) basis = engine.traceLot(lot);
