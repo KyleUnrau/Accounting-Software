@@ -6,7 +6,7 @@ import type { Transaction } from "../transactions/transaction.js";
 import type { UTXI } from "../transactions/inputs.js";
 import type { UTXO } from "../transactions/outputs.js";
 import { Account } from "./account.js";
-import { getDisplayName, type AccountName, type AccountNode } from "./node.js";
+import { AccountNode, getDisplayName, type AccountName } from "./node.js";
 import type { FolderSummary, NodeSummary } from "./summary.js";
 
 
@@ -16,13 +16,14 @@ import type { FolderSummary, NodeSummary } from "./summary.js";
  * polarity emerges from the hierarchy rather than from hardcoded debit/credit labels.
  */
 
-export class AccountFolder implements AccountNode {
+export class AccountFolder extends AccountNode {
     constructor(
-        public name: AccountName,
-        public localOrientation: Orientation,
+        name: AccountName,
+        localOrientation: Orientation,
         public children: AccountNode[] = [],
-        public parent: AccountFolder | null = null
+        parent: AccountFolder | null = null
     ) {
+        super(name, localOrientation, parent);
         for (const child of this.children) child.parent = this;
     }
 
@@ -52,19 +53,19 @@ export class AccountFolder implements AccountNode {
     }
 
     public addResidualAccount(name: AccountName, localOrientation: Orientation): ResidualAccount {
-        const child = new ResidualAccount(name, localOrientation);
+        const child = new ResidualAccount(name, localOrientation, this);
         this.addChild(child);
         return child;
     }
 
     public addExchangeAccount(name: AccountName, localOrientation: Orientation): ExchangeAccount {
-        const child = new ExchangeAccount(name, localOrientation);
+        const child = new ExchangeAccount(name, localOrientation, this);
         this.addChild(child);
         return child;
     }
 
     public addTerminalAccount(name: AccountName, localOrientation: Orientation): TerminalAccount {
-        const child = new TerminalAccount(name, localOrientation);
+        const child = new TerminalAccount(name, localOrientation, this);
         this.addChild(child);
         return child;
     }
@@ -85,11 +86,6 @@ export class AccountFolder implements AccountNode {
         return accounts;
     }
 
-    public getEffectiveOrientation(): Orientation {
-        if (this.parent === null) return this.localOrientation;
-        return this.parent.getEffectiveOrientation() * this.localOrientation;
-    }
-
     public getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint {
         let sum = 0n;
         for (const child of this.children) sum += child.getSignedBalanceScaled(position, transactions);
@@ -102,27 +98,6 @@ export class AccountFolder implements AccountNode {
             for (const [position, bal] of child.getSignedBalancesScaled(transactions))
                 result.set(position, (result.get(position) ?? 0n) + bal);
         }
-        return result;
-    }
-
-    public getBalanceScaled(position: Position, transactions: Transaction[]): bigint {
-        return BigInt(this.getEffectiveOrientation()) * this.getSignedBalanceScaled(position, transactions);
-    }
-
-    public getBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
-        const result = new Map<Position, bigint>();
-        for (const [position, signed] of this.getSignedBalancesScaled(transactions))
-            result.set(position, BigInt(this.getEffectiveOrientation()) * signed);
-        return result;
-    }
-
-    public getBalance(position: Position, transactions: Transaction[]): number {
-        return unscale(this.getBalanceScaled(position, transactions), position);
-    }
-
-    public getBalances(transactions: Transaction[]): Map<Position, number> {
-        const result = new Map<Position, number>();
-        for (const [pos, raw] of this.getBalancesScaled(transactions)) result.set(pos, unscale(raw, pos));
         return result;
     }
 

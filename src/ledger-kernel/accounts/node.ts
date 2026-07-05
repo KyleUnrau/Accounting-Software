@@ -1,7 +1,7 @@
 import type { AccountFolder } from "./folder.js";
 import type { NodeSummary } from "./summary.js";
 import type { Orientation } from "../ledger.js";
-import type { Position } from "../positions.js";
+import { unscale, type Position } from "../positions.js";
 import type { Transaction } from "../transactions/transaction.js";
 
 
@@ -29,15 +29,40 @@ export function getDisplayName(name: AccountName, balance: number): string {
     return name.positive;
 }
 
-export interface AccountNode {
-    name: string | {positive: string, negative: string};
-    parent: AccountFolder | null;
-    getEffectiveOrientation(): Orientation;
-    getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint;
-    getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint>;
-    getBalanceScaled(position: Position, transactions: Transaction[]): bigint;
-    getBalancesScaled(transactions: Transaction[]): Map<Position, bigint>;
-    getBalance(position: Position, transactions: Transaction[]): number;
-    getBalances(transactions: Transaction[]): Map<Position, number>;
-    summarize(position: Position, transactions: Transaction[]): NodeSummary;
+export abstract class AccountNode {
+    constructor(
+        public name: string | {positive: string, negative: string},
+        public localOrientation: Orientation,
+        public parent: AccountFolder | null
+    ) {}
+
+    abstract getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint;
+    abstract getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint>;
+    abstract summarize(position: Position, transactions: Transaction[]): NodeSummary;
+    
+    public getEffectiveOrientation(): Orientation {
+        if (this.parent === null) return this.localOrientation;
+        return this.parent.getEffectiveOrientation() * this.localOrientation;
+    }
+
+    public getBalanceScaled(position: Position, transactions: Transaction[]): bigint {
+        return BigInt(this.getEffectiveOrientation()) * this.getSignedBalanceScaled(position, transactions);
+    }
+
+    public getBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
+        const result = new Map<Position, bigint>();
+        for (const [position, signed] of this.getSignedBalancesScaled(transactions))
+            result.set(position, BigInt(this.getEffectiveOrientation()) * signed);
+        return result;
+    }
+
+    public getBalance(position: Position, transactions: Transaction[]): number {
+        return unscale(this.getBalanceScaled(position, transactions), position);
+    }
+
+    public getBalances(transactions: Transaction[]): Map<Position, number> {
+        const result = new Map<Position, number>();
+        for (const [pos, raw] of this.getBalancesScaled(transactions)) result.set(pos, unscale(raw, pos));
+        return result;
+    }
 }

@@ -5,6 +5,7 @@ import { TransactionGroup, OrderedTransactionGroup } from "../../ledger-kernel/t
 import { LedgerEvent } from "../../ledger-kernel/event.js";
 import { ExchangeResolution, ExchangeTransactions } from "../../equity-policy/exchange.js";
 import { TerminalResolution, TerminalTransactions } from "../../equity-policy/terminal.js";
+import { generateInputs, generateOutputs } from "../../ledger-kernel/transactions/staged.js";
 
 // ---------------------------------------------------------------------------
 // Transaction.flatten()
@@ -58,8 +59,8 @@ test("ExchangeTransactions is a TransactionGroup subclass with kind 'exchange'",
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    const fromInputs = f.cash.generateInputs(f.cad, 500, f.ledger.transactions);
-    const toOutputs = f.cash.generateOutputs(f.usd, 375, f.ledger.transactions);
+    const fromInputs = generateInputs(f.cash, f.cad, 500, f.ledger.transactions);
+    const toOutputs = generateOutputs(f.cash, f.usd, 375, f.ledger.transactions);
     const resolution = new ExchangeResolution(
         fromInputs, toOutputs,
         { gain: f.capitalGains, loss: f.capitalLosses }, f.cadToUsd,
@@ -136,7 +137,7 @@ test("TerminalTransactions is a TransactionGroup subclass with kind 'terminal'",
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    const inputs = f.cash.generateInputs(f.cad, 50, f.ledger.transactions);
+    const inputs = generateInputs(f.cash, f.cad, 50, f.ledger.transactions);
     const resolution = new TerminalResolution(inputs, f.exchangeExpense, f.ledger.transactions, f.engine);
     const terminalTxs = resolution.constructTransactions();
 
@@ -195,8 +196,8 @@ test("event.record(resolution) uses the TransactionNodeFactory interface to mate
 
     const event = f.ledger.beginEvent();
     const view = event.view();
-    const fromInputs = f.cash.generateInputs(f.cad, 500, view);
-    const toOutputs = f.cash.generateOutputs(f.usd, 375, view);
+    const fromInputs = generateInputs(f.cash, f.cad, 500, view);
+    const toOutputs = generateOutputs(f.cash, f.usd, 375, view);
     const resolution = new ExchangeResolution(
         fromInputs, toOutputs,
         { gain: f.capitalGains, loss: f.capitalLosses }, f.cadToUsd,

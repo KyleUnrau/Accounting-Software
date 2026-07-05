@@ -33,8 +33,8 @@ export function splitInputs(inputs: Input[], quantity: bigint): [Input[], Input[
             taken.push(new UTXOConsumption(head, input.source));
             rest.push(new UTXOConsumption(tail, input.source));
         } else {
-            taken.push(new UTXI(head, input.position));
-            rest.push(new UTXI(tail, input.position));
+            taken.push(new UTXI(head, input.position, input.account));
+            rest.push(new UTXI(tail, input.position, input.account));
         }
         remaining = 0n;
     }

@@ -4,9 +4,13 @@ import assert from "node:assert/strict";
 import { UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { UTXO } from "../../ledger-kernel/transactions/outputs.js";
 import { ResidualUTXI } from "../../ledger-kernel/transactions/special-edges/residual.js";
+import type { Transaction } from "../../ledger-kernel/transactions/transaction.js";
 import { assertPositionUnifiromity, type Position } from "../../ledger-kernel/positions.js";
+import type { Account } from "../../ledger-kernel/accounts/account.js";
+import { Deltas } from "../../ledger-kernel/accounts/delta.js";
 import { collectOriginLeaves } from "../../equity-policy/provenance/graph-traversal.js";
 import { TerminalResolution } from "../../equity-policy/terminal.js";
+import { generateInputs } from "../../ledger-kernel/transactions/staged.js";
 import { commitSwap, makeFixture, openInto, type Fixture } from "../utils/ledger-fixture.js";
 
 // ---------------------------------------------------------------------------
@@ -19,9 +23,9 @@ function originOf(f: Fixture, lot: UTXO): Map<Position, bigint> {
     return collectOriginLeaves(f.engine.compute([new UTXOConsumption(available, lot)]));
 }
 
-/** All UTXO lots an account currently holds in a position (committed or not), in creation order. */
-function lotsOf(_f: Fixture, account: { getLotStore(p: Position): { utxos: UTXO[] } }, position: Position): UTXO[] {
-    return account.getLotStore(position).utxos;
+/** All UTXO lots an account currently holds in a position, in creation order. */
+function lotsOf(f: Fixture, account: Account, position: Position): UTXO[] {
+    return Deltas.getUtxos(f.ledger.transactions, position, account);
 }
 
 /** The open-position balance an exchange account reports for a position. */
@@ -453,7 +457,7 @@ test("INV5f: expensing forward-exchanged value terminalizes only the forward edg
 
     // event4: expense 200 B. Its basis traces to 400 A through the event3 forward edge (1000 A ↔ 500 B).
     const ev = f.ledger.beginEvent();
-    const inputs = f.cash.generateInputs(f.usd, 200, ev.view());
+    const inputs = generateInputs(f.cash, f.usd, 200, ev.view());
     const res = new TerminalResolution(inputs, f.rentExpense, ev.view(), f.engine);
 
     // (Q11/symptom) No residual leg is closed and nothing is re-recognized just because B is expensed.
@@ -511,7 +515,7 @@ test("INV6: origin USD and CAD-derived USD stay distinct lots; FIFO consumes the
 
     // The configured disposal method is FIFO: consuming 1000 USD draws the OLDEST lot (lot A) in full,
     // deterministically, leaving the CAD-derived lot B untouched.
-    const inputs = f.cash.generateInputs(f.usd, 1000, f.ledger.transactions);
+    const inputs = generateInputs(f.cash, f.usd, 1000, f.ledger.transactions);
     assert.equal(inputs.length, 1);
     assert.equal((inputs[0] as UTXOConsumption).source, lotA, "FIFO consumes the oldest (origin USD) lot first");
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { collectOriginLeaves } from "../../equity-policy/provenance/graph-traversal.js";
 import { UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { makeFixture, openInto, commitSwap } from "../utils/ledger-fixture.js";
+import { Deltas } from "../../ledger-kernel/accounts/delta.js";
 
 // Helper: the open-position balance an ExchangePositionsAccount reports for a position.
 function openBalance(account: { getSignedBalanceScaled(p: any, t: any): bigint }, position: any, transactions: any): bigint {
@@ -113,7 +114,7 @@ test("a partial exchange resolves only its portion; the rest is an independent t
     assert.equal(f.drawings.getBalance(f.cad, f.ledger.transactions), 100);
 
     // The exchanged USD's basis traces purely to the CAD origin — the withdrawal did not bleed in.
-    const usdUtxo = f.cash.getLotStore(f.usd).utxos.find(u => u.calculateAvailable(f.ledger.transactions) > 0n)!;
+    const usdUtxo = Deltas.getUtxos(f.ledger.transactions, f.usd, f.cash).find(u => u.calculateAvailable(f.ledger.transactions) > 0n)!;
     const leaves = collectOriginLeaves(f.engine.compute([new UTXOConsumption(usdUtxo.quantity, usdUtxo)]));
     assert.deepEqual([...leaves.keys()], [f.cad]);
     assert.equal(leaves.get(f.cad), 40000n);

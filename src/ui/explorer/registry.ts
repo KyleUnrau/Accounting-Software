@@ -1,16 +1,13 @@
 import type { Transaction } from "../../ledger-kernel/transactions/transaction.js";
-import type { Input } from "../../ledger-kernel/transactions/inputs.js";
-import type { Output } from "../../ledger-kernel/transactions/outputs.js";
-import { Account } from "../../ledger-kernel/accounts/account.js";
+import { UTXI, type Input } from "../../ledger-kernel/transactions/inputs.js";
+import { UTXO, type Output } from "../../ledger-kernel/transactions/outputs.js";
 import { AccountFolder } from "../../ledger-kernel/accounts/folder.js";
 import type { AccountNode } from "../../ledger-kernel/accounts/node.js";
-import { ResidualUTXI } from "../../ledger-kernel/transactions/special-edges/residual.js";
 import {
     Exchange,
     ExchangedUTXI,
     ExchangedUTXO
 } from "../../ledger-kernel/transactions/special-edges/exchange.js";
-import { TerminalUTXO } from "../../ledger-kernel/transactions/special-edges/terminal.js";
 import type { LedgerView } from "../../scenarios.js";
 
 /** Any value-bearing lot or consumption record that can appear in a transaction's inputs/outputs. */
@@ -37,7 +34,6 @@ export class Registry {
     constructor(view: LedgerView) {
         this.indexAccount(view.ledger.netAssets);
         this.indexAccount(view.ledger.equity);
-        this.indexAccountLots();
         for (const tx of view.ledger.transactions) {
             for (const input of tx.inputs) this.register(input);
             for (const output of tx.outputs) this.register(output);
@@ -52,33 +48,15 @@ export class Registry {
         if (node instanceof AccountFolder) for (const child of node.children) this.indexAccount(child);
     }
 
-    /** Maps every lot held in a regular {@link Account}'s lot stores back to that account. */
-    private indexAccountLots(): void {
-        for (const node of this.accountId.keys()) {
-            if (!(node instanceof Account)) continue;
-            for (const store of node.lotStores.values()) {
-                for (const utxo of store.utxos) this.owner.set(utxo, node);
-                for (const utxi of store.utxis) this.owner.set(utxi, node);
-            }
-        }
-    }
-
-    /** Assigns an id to a lot/consumption (once) and resolves ownership for exchange/residual lots. */
+    /** Assigns an id to a lot/consumption (once) and resolves ownership from its `.account` back-reference. */
     private register(obj: LotLike): void {
         if (this.lotId.has(obj)) return;
         const id = `n${this.lotId.size}`;
         this.lotId.set(obj, id);
         this.lotById.set(id, obj);
 
-        if (obj instanceof ResidualUTXI || obj instanceof TerminalUTXO) this.owner.set(obj, obj.account);
-        if (obj instanceof ExchangedUTXO) {
-            this.owner.set(obj, obj.exchange.fromAccount);
-            this.registerExchange(obj.exchange);
-        }
-        if (obj instanceof ExchangedUTXI) {
-            this.owner.set(obj, obj.exchange.toAccount);
-            this.registerExchange(obj.exchange);
-        }
+        if (obj instanceof UTXO || obj instanceof UTXI) this.owner.set(obj, obj.account);
+        if (obj instanceof ExchangedUTXO || obj instanceof ExchangedUTXI) this.registerExchange(obj.exchange);
     }
 
     private registerExchange(exchange: Exchange): void {

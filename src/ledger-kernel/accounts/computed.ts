@@ -4,8 +4,7 @@ import type { Transaction } from "../transactions/transaction.js";
 import { ResidualUTXI } from "../transactions/special-edges/residual.js";
 import { ExchangedUTXI, ExchangedUTXO } from "../transactions/special-edges/exchange.js";
 import { TerminalUTXO } from "../transactions/special-edges/terminal.js";
-import { unscale } from "../positions.js";
-import { getDisplayName, type AccountName, type AccountNode } from "./node.js";
+import { AccountNode, getDisplayName, type AccountName } from "./node.js";
 import type { AccountSummary } from "./summary.js";
 import type { AccountFolder } from "./folder.js";
 
@@ -16,13 +15,14 @@ import type { AccountFolder } from "./folder.js";
  * logic lives here. No `generateInputs` or `generateOutputs` — these accounts cannot be used
  * as sources or destinations in transaction construction.
  */
-export abstract class ComputedAccount implements AccountNode {
-    public parent: AccountFolder | null = null;
-
+export abstract class ComputedAccount extends AccountNode {
     constructor(
-        public name: AccountName,
-        public localOrientation: Orientation
-    ) {}
+        name: AccountName,
+        localOrientation: Orientation,
+        parent: AccountFolder | null
+    ) {
+        super(name, localOrientation, parent);
+    }
 
     public getEffectiveOrientation(): Orientation {
         if (this.parent === null) return this.localOrientation;
@@ -31,27 +31,6 @@ export abstract class ComputedAccount implements AccountNode {
 
     public abstract getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint;
     public abstract getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint>;
-
-    public getBalanceScaled(position: Position, transactions: Transaction[]): bigint {
-        return BigInt(this.getEffectiveOrientation()) * this.getSignedBalanceScaled(position, transactions);
-    }
-
-    public getBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
-        const result = new Map<Position, bigint>();
-        for (const [position, signed] of this.getSignedBalancesScaled(transactions))
-            result.set(position, BigInt(this.getEffectiveOrientation()) * signed);
-        return result;
-    }
-
-    public getBalance(position: Position, transactions: Transaction[]): number {
-        return unscale(this.getBalanceScaled(position, transactions), position);
-    }
-
-    public getBalances(transactions: Transaction[]): Map<Position, number> {
-        const result = new Map<Position, number>();
-        for (const [pos, raw] of this.getBalancesScaled(transactions)) result.set(pos, unscale(raw, pos));
-        return result;
-    }
 
     public summarize(position: Position, transactions: Transaction[]): AccountSummary {
         const balance: number = this.getBalance(position, transactions);
@@ -79,12 +58,10 @@ export class ExchangeAccount extends ComputedAccount {
         let balance = 0n;
         for (const tx of transactions) {
             for (const output of tx.outputs)
-                if (output instanceof ExchangedUTXO && output.position === position
-                        && output.exchange.fromAccount === this)
+                if (output instanceof ExchangedUTXO && output.position === position && output.account === this)
                     balance += output.calculateAvailable(transactions);
             for (const input of tx.inputs)
-                if (input instanceof ExchangedUTXI && input.position === position
-                        && input.exchange.toAccount === this)
+                if (input instanceof ExchangedUTXI && input.position === position && input.account === this)
                     balance -= input.calculateAvailable(transactions);
         }
         return balance;
@@ -94,10 +71,10 @@ export class ExchangeAccount extends ComputedAccount {
         const positions = new Set<Position>();
         for (const tx of transactions) {
             for (const output of tx.outputs)
-                if (output instanceof ExchangedUTXO && output.exchange.fromAccount === this)
+                if (output instanceof ExchangedUTXO && output.account === this)
                     positions.add(output.position);
             for (const input of tx.inputs)
-                if (input instanceof ExchangedUTXI && input.exchange.toAccount === this)
+                if (input instanceof ExchangedUTXI && input.account === this)
                     positions.add(input.position);
         }
         const result = new Map<Position, bigint>();
@@ -112,33 +89,77 @@ export class ExchangeAccount extends ComputedAccount {
 /**
  * Tracks recognized **gains** as an equity account. A gain is a *directional suspended residual
  * edge*: a {@link ResidualUTXI} carrying its origin-position residual-basis, recognized at its
- * surface and able to later carry back toward its origin. Unlike the scan-based
- * {@link ExchangeAccount}, this account owns its residual lots directly — each is registered via
- * {@link addResidualInput}, called by {@link ExchangeResolution} and {@link TerminalResolution}.
- * Multiple ResidualAccounts (e.g. "Capital Gains", "FX Gains") can coexist without crosstalk.
+ * surface and able to later carry back toward its origin. Like {@link ExchangeAccount}, this
+ * account holds no lot list of its own — {@link addResidualInput} (called by
+ * {@link ExchangeResolution} and {@link TerminalResolution}) only mints the lot and hands it back
+ * for the caller to place in a transaction; the balance is derived by scanning `transactions` for
+ * committed {@link ResidualUTXI}s whose `.account` is this account. Multiple ResidualAccounts
+ * (e.g. "Capital Gains", "FX Gains") can coexist without crosstalk.
  *
  * Losses are **not** held here — they are terminal and settle into a {@link TerminalAccount} at
  * their cost-basis origin. Gains reduce the root balance (increasing equity inside a
  * positive-orientation equity folder like netIncome).
  */
 export class ResidualAccount extends ComputedAccount {
-    private readonly utxis: ResidualUTXI[] = [];
-
     public addResidualInput(quantity: bigint, position: Position, originBasis: Map<Position, bigint>): ResidualUTXI {
-        const utxi = new ResidualUTXI(quantity, position, originBasis, this);
-        this.utxis.push(utxi);
-        return utxi;
+        return new ResidualUTXI(quantity, position, originBasis, this);
     }
 
     public getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint {
         let balance = 0n;
-        for (const utxi of this.utxis)
-            if (utxi.position === position && utxi.isCommitted(transactions)) balance -= utxi.calculateAvailable(transactions);
+        for (const tx of transactions)
+            for (const input of tx.inputs)
+                if (input instanceof ResidualUTXI && input.position === position && input.account === this)
+                    balance -= input.calculateAvailable(transactions);
         return balance;
     }
 
     public getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
-        const positions = new Set<Position>(this.utxis.map(t => t.position));
+        const positions = new Set<Position>();
+        for (const tx of transactions)
+            for (const input of tx.inputs)
+                if (input instanceof ResidualUTXI && input.account === this) positions.add(input.position);
+        const result = new Map<Position, bigint>();
+        for (const position of positions) {
+            const balance = this.getSignedBalanceScaled(position, transactions);
+            if (balance !== 0n) result.set(position, balance);
+        }
+        return result;
+    }
+}
+
+/**
+ * A **terminal sink** for final origin-basis settlement events — expenses, realized exchange losses,
+ * and negative-residual settlements. Unlike an ordinary {@link Account}, it has **no**
+ * `generateInputs`/`generateOutputs`: it can never be a transaction *source*, and the
+ * {@link TerminalUTXO}s it emits are non-consumable. It therefore records final settlement value
+ * (participating in net-zero and summaries) without ever becoming spendable inventory.
+ *
+ * Recognitions are minted via {@link recognize}, which only constructs a {@link TerminalUTXO} and
+ * hands it back for the caller to place in a transaction's outputs — this account holds no list of
+ * its own. The balance is derived by scanning `transactions` for committed {@link TerminalUTXO}s
+ * whose `.account` is this account, mirroring how {@link ExchangeAccount} derives its balance.
+ */
+export class TerminalAccount extends ComputedAccount {
+    /** Mints a terminal settlement record for `quantity` in `position`, owned by this account. Place it in a transaction's outputs. */
+    public recognize(quantity: bigint, position: Position): TerminalUTXO {
+        return new TerminalUTXO(quantity, position, this);
+    }
+
+    public getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint {
+        let balance = 0n;
+        for (const tx of transactions)
+            for (const output of tx.outputs)
+                if (output instanceof TerminalUTXO && output.position === position && output.account === this)
+                    balance += output.calculateAvailable(transactions);
+        return balance;
+    }
+
+    public getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
+        const positions = new Set<Position>();
+        for (const tx of transactions)
+            for (const output of tx.outputs)
+                if (output instanceof TerminalUTXO && output.account === this) positions.add(output.position);
         const result = new Map<Position, bigint>();
         for (const position of positions) {
             const balance = this.getSignedBalanceScaled(position, transactions);
@@ -165,42 +186,3 @@ export function lossAccountOf(target: ResidualTarget): TerminalAccount {
     return target.loss;
 }
 
-/**
- * A **terminal sink** for final origin-basis settlement events — expenses, realized exchange losses,
- * and negative-residual settlements. Unlike an ordinary {@link Account}, it owns no
- * {@link PositionLotStore} and has **no** `generateInputs`/`generateOutputs`: it can never be a
- * transaction *source*, and the {@link TerminalUTXO}s it emits are non-consumable. It therefore
- * records final settlement value (participating in net-zero and summaries) without ever becoming
- * spendable inventory.
- *
- * Recognitions are minted via {@link recognize}, which returns a {@link TerminalUTXO} the caller
- * places in a transaction's outputs. The balance is the sum of this account's committed terminal
- * records — mirroring how an expense {@link Account}'s UTXO debits accumulate.
- */
-export class TerminalAccount extends ComputedAccount {
-    private readonly terminals: TerminalUTXO[] = [];
-
-    /** Mints a terminal settlement record for `quantity` in `position`, owned by this account. Place it in a transaction's outputs. */
-    public recognize(quantity: bigint, position: Position): TerminalUTXO {
-        const terminal = new TerminalUTXO(quantity, position, this);
-        this.terminals.push(terminal);
-        return terminal;
-    }
-
-    public getSignedBalanceScaled(position: Position, transactions: Transaction[]): bigint {
-        let balance = 0n;
-        for (const terminal of this.terminals)
-            if (terminal.position === position && terminal.isCommitted(transactions)) balance += terminal.calculateAvailable(transactions);
-        return balance;
-    }
-
-    public getSignedBalancesScaled(transactions: Transaction[]): Map<Position, bigint> {
-        const positions = new Set<Position>(this.terminals.map(t => t.position));
-        const result = new Map<Position, bigint>();
-        for (const position of positions) {
-            const balance = this.getSignedBalanceScaled(position, transactions);
-            if (balance !== 0n) result.set(position, balance);
-        }
-        return result;
-    }
-}

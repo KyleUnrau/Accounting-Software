@@ -49,17 +49,20 @@ export namespace ScenarioLedger {
         
         const capitalGains = netCapitalGains.addFolder("Capital Gains", Orientation.Positive);
         const gainsFromA = capitalGains.addResidualAccount("Capital Gains from Disposition of A", Orientation.Positive);
-        const gainsFromB = capitalGains.addResidualAccount("Capital Gains from Disposition of B", Orientation.Positive)
+        const gainsFromB = capitalGains.addResidualAccount("Capital Gains from Disposition of B", Orientation.Positive);
+        const gainsFromC = capitalGains.addResidualAccount('Capital Gains from Disposition of C', Orientation.Positive);
 
         const capitalLosses = netCapitalGains.addFolder("Capital Loss", Orientation.Negative);
         const lossesFromA = capitalLosses.addTerminalAccount("Capital Loss from Disposition of A", Orientation.Positive);
         const lossesFromB = capitalLosses.addTerminalAccount("Capital Loss from Disposition of B", Orientation.Positive);
+        const lossesFromC = capitalLosses.addTerminalAccount("Capital Loss from Disposition of C", Orientation.Positive);
 
         const netTransfers = equity.addFolder("Net Transfers", Orientation.Positive);
 
         const transfersFrom = netTransfers.addFolder("Transfers From", Orientation.Positive);
         const fromA = transfersFrom.addExchangeAccount("Transfers from A", Orientation.Positive);
         const fromB = transfersFrom.addExchangeAccount("Transfers from B", Orientation.Positive);
+        const fromC = transfersFrom.addExchangeAccount("Transfers from C", Orientation.Positive);
 
         const transfersTo = netTransfers.addFolder("Transfers To", Orientation.Negative);
         const toA = transfersTo.addExchangeAccount("Transfers to A", Orientation.Positive);
@@ -94,19 +97,23 @@ export namespace ScenarioLedger {
             capitalGains,
             gainsFromA,
             gainsFromB,
+            gainsFromC,
 
             capitalLosses,
             lossesFromA,
             lossesFromB,
+            lossesFromC,
 
             residualA: {gain: gainsFromA, loss: lossesFromA},
             residualB: {gain: gainsFromB, loss: lossesFromB},
+            residualC: {gain: gainsFromC, loss: lossesFromC},
 
             netTransfers,
 
             transfersFrom,
             fromA,
             fromB,
+            fromC,
 
             transfersTo,
             toA,
@@ -122,7 +129,9 @@ export namespace ScenarioLedger {
             exchangeExpense,
             rentExpense,
             inventoryLoss,
-            spoilageExpense
+            spoilageExpense,
+
+            inventoryResidual: {gain: inventoryProfit, loss: inventoryLoss}
         };
     }
 
@@ -163,6 +172,24 @@ export namespace ScenarioLedger {
             toOutputs: {position: positions.a, account: accounts.cash, quantity: 800},
             residual: accounts.residualB,
             exchange: {from: accounts.toA, to: accounts.fromB}
+        }),
+        event6: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.a, account: accounts.cash, quantity: 1350},
+            toOutputs: {position: positions.c, account: accounts.inventory, quantity: 13500},
+            residual: accounts.residualA,
+            exchange: {from: accounts.toC, to: accounts.fromA}
+        }),
+        event7: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.c, account: accounts.inventory, quantity: 13500},
+            toOutputs: {position: positions.a, account: accounts.cash, quantity: 2700},
+            residual: accounts.inventoryResidual,
+            exchange: {from: accounts.toA, to: accounts.fromC}
+        }),
+        event8: (): LedgerEvent => ledger.newExchange({
+            fromInputs: {position: positions.a, account: accounts.cash, quantity: 1350},
+            toOutputs: {position: positions.b, account: accounts.cash, quantity: 675},
+            residual: accounts.residualA,
+            exchange: {from: accounts.toB, to: accounts.fromA}
         })
     }
 

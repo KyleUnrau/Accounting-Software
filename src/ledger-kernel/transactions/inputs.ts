@@ -1,6 +1,7 @@
 import type { Position } from "../positions.js";
-import type { TransactionLike } from "./transaction.js";
+import type { TransactionView } from "./transaction.js";
 import { UTXIConsumption, type UTXO } from "./outputs.js";
+import type { AccountNode } from "../accounts/node.js";
 
 export type Input = UTXI | UTXOConsumption;
 
@@ -8,21 +9,25 @@ export type Input = UTXI | UTXOConsumption;
  * An unspent transaction input — value entering the system without consuming a prior output.
  * Used for opening balances, equity injections, and exchange receipts. Supports
  * partial settlement via {@link UTXIConsumption} objects in later transaction outputs.
+ *
+ * `account` attributes the lot to whichever {@link AccountNode} minted it at generation time —
+ * the sole source of ownership; no account keeps a separate list of the lots it holds.
  */
-export class UTXI {
+export class UTXI<TAccount extends AccountNode = AccountNode> {
     public type = "utxi";
     public quantity: bigint;
 
     constructor(
         quantity: bigint,
-        public position: Position
+        public position: Position,
+        public readonly account: TAccount
     ) {
         if (quantity < 0n) throw new Error(`The quantity of a UTXI must be a non-negative integer, got ${quantity}`);
         this.quantity = quantity;
     }
 
     /** Returns all {@link UTXIConsumption}s referencing this UTXI across the transaction history. */
-    public getConsumptions(transactions: readonly TransactionLike[]): UTXIConsumption[] {
+    public getConsumptions(transactions: readonly TransactionView[]): UTXIConsumption[] {
         const consumptions: UTXIConsumption[] = [];
 
         for (const transaction of transactions) {
@@ -35,7 +40,7 @@ export class UTXI {
     }
 
     /** Remaining quantity not yet settled by any {@link UTXIConsumption} in the history. */
-    public calculateAvailable(transactions: readonly TransactionLike[]): bigint {
+    public calculateAvailable(transactions: readonly TransactionView[]): bigint {
         let available: bigint = this.quantity;
         for (const consumption of this.getConsumptions(transactions)) available -= consumption.quantity;
         return available;
@@ -46,7 +51,7 @@ export class UTXI {
      * `transactions`. A generated-but-not-yet-committed lot returns `false`, so balances exclude it
      * until the transaction that introduces it is appended to the ledger.
      */
-    public isCommitted(transactions: readonly TransactionLike[]): boolean {
+    public isCommitted(transactions: readonly TransactionView[]): boolean {
         return transactions.some(transaction => transaction.inputs.includes(this));
     }
 
@@ -54,7 +59,7 @@ export class UTXI {
      * Creates a {@link UTXIConsumption} for `quantity` units, asserting the available balance
      * is sufficient. The returned object must be placed in a transaction's outputs.
      */
-    public consume(quantity: bigint, transactions: readonly TransactionLike[]): UTXIConsumption {
+    public consume(quantity: bigint, transactions: readonly TransactionView[]): UTXIConsumption {
         if (quantity < 0n) throw new Error(`Attempted to consume a negative number from a UTXI`);
 
         const available: bigint = this.calculateAvailable(transactions);

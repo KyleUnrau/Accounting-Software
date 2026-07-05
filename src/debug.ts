@@ -13,6 +13,7 @@ import { unwind } from "./equity-policy/recaptures.js";
 import { ScenarioLedger } from "./scenarios.js";
 import { ExchangeResolution } from "./equity-policy/exchange.js";
 import { TerminalResolution } from "./equity-policy/terminal.js";
+import { computeAccountDeltas, summarizeAccountDelta, verifyBalanced } from "./ledger-kernel/accounts/delta.js";
 
 runCLI({
     ledger: ScenarioLedger.ledger,
@@ -34,5 +35,8 @@ runCLI({
     TerminalResolution,
     scale,
     unscale,
-    unwind
+    unwind,
+    computeAccountDeltas,
+    verifyBalanced,
+    summarizeAccountDelta
 });

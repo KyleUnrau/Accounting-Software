@@ -15,13 +15,13 @@ import { UTXI } from "../inputs.js";
  * origin positions.
  */
 
-export class ResidualUTXI extends UTXI {
+export class ResidualUTXI extends UTXI<ResidualAccount> {
     public type = "residual-utxi";
 
     constructor(
         quantity: bigint,
         position: Position,
         public readonly originBasis: Map<Position, bigint>,
-        public readonly account: ResidualAccount
-    ) { super(quantity, position); }
+        account: ResidualAccount
+    ) { super(quantity, position, account); }
 }

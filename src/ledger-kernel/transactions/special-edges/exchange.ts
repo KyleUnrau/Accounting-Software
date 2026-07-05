@@ -42,10 +42,12 @@ export class Exchange {
         to: { quantity: bigint; position: Position; },
         target: ExchangeTarget
     ) {
-        this.from = new ExchangedUTXO(from.quantity, from.position, this);
-        this.to = new ExchangedUTXI(to.quantity, to.position, this);
+        // fromAccount/toAccount must be set before constructing from/to: ExchangedUTXO/UTXI
+        // read them off `this` at construction time to set their own `.account`.
         this.fromAccount = "from" in target ? target.from : target;
         this.toAccount = "to" in target ? target.to : target;
+        this.from = new ExchangedUTXO(from.quantity, from.position, this);
+        this.to = new ExchangedUTXI(to.quantity, to.position, this);
     }
 
     /**
@@ -70,22 +72,22 @@ export class Exchange {
     }
 }
 /** The from-side of an {@link Exchange} — value given away; placed in a transaction's outputs. */
-export class ExchangedUTXO extends UTXO {
+export class ExchangedUTXO extends UTXO<ExchangeAccount> {
     public type = "exchanged-utxo";
 
     constructor(
         quantity: bigint,
         position: Position,
         public readonly exchange: Exchange
-    ) { super(quantity, position); }
+    ) { super(quantity, position, exchange.fromAccount); }
 }
 /** The to-side of an {@link Exchange} — value received; placed in a transaction's inputs. */
-export class ExchangedUTXI extends UTXI {
+export class ExchangedUTXI extends UTXI<ExchangeAccount> {
     public type = "exchanged-utxi";
 
     constructor(
         quantity: bigint,
         position: Position,
         public readonly exchange: Exchange
-    ) { super(quantity, position); }
+    ) { super(quantity, position, exchange.toAccount); }
 }

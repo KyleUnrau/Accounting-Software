@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { makeFixture, openInto } from "../utils/ledger-fixture.js";
 import { Transaction } from "../../ledger-kernel/transactions/transaction.js";
+import { generateInputs, generateOutputs } from "../../ledger-kernel/transactions/staged.js";
 import { UTXI, UTXOConsumption } from "../../ledger-kernel/transactions/inputs.js";
 import { UTXO } from "../../ledger-kernel/transactions/outputs.js";
 
@@ -32,13 +33,13 @@ test("Transaction.verify throws when two consumptions over-draw the same lot", (
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    const draw = f.cash.generateInputs(f.cad, 1000, f.ledger.transactions);
+    const draw = generateInputs(f.cash, f.cad, 1000, f.ledger.transactions);
     const source = (draw[0] as UTXOConsumption).source;
 
     // Two full-balance consumptions of the same lot: each fits individually, together they double-spend.
     const c1 = new UTXOConsumption(source.quantity, source);
     const c2 = new UTXOConsumption(source.quantity, source);
-    const balancingOutput = new UTXO(source.quantity * 2n, f.cad);
+    const balancingOutput = new UTXO(source.quantity * 2n, f.cad, source.account);
 
     assert.throws(
         () => new Transaction([c1, c2], [balancingOutput], f.ledger.transactions),
@@ -55,13 +56,13 @@ test("ledger.verify backstops over-consumption spread across a batch of transact
     // Both transactions are built against the same pre-commit snapshot, so each one's own verify sees
     // the full 1000 available and passes — the double-spend only becomes visible once both are committed.
     const t1 = new Transaction(
-        f.cash.generateInputs(f.cad, 1000, f.ledger.transactions),
-        f.inventory.generateOutputs(f.cad, 1000, f.ledger.transactions),
+        generateInputs(f.cash, f.cad, 1000, f.ledger.transactions),
+        generateOutputs(f.inventory, f.cad, 1000, f.ledger.transactions),
         f.ledger.transactions
     );
     const t2 = new Transaction(
-        f.cash.generateInputs(f.cad, 1000, f.ledger.transactions),
-        f.wallet.generateOutputs(f.cad, 1000, f.ledger.transactions),
+        generateInputs(f.cash, f.cad, 1000, f.ledger.transactions),
+        generateOutputs(f.wallet, f.cad, 1000, f.ledger.transactions),
         f.ledger.transactions
     );
 
@@ -78,7 +79,7 @@ test("uncommitted lots still do not affect balances until committed", () => {
     const f = makeFixture();
     openInto(f, f.cash, f.cad, 1000);
 
-    f.cash.generateOutputs(f.cad, 750, f.ledger.transactions);
+    generateOutputs(f.cash, f.cad, 750, f.ledger.transactions);
 
     assert.equal(f.cash.getBalance(f.cad, f.ledger.transactions), 1000, "uncommitted receipt must not change the balance");
     assert.ok(f.ledger.verify().ok, "ledger must still verify with an uncommitted lot outstanding");

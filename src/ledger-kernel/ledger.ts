@@ -3,13 +3,17 @@ import type { Result } from "../utils.js";
 import { EventBuilder, LedgerEvent } from "./event.js";
 import { type StagedExchange, type StagedTerminal } from "./transactions/staged.js";
 import { type StagedTransaction } from "./transactions/staged.js";
-import { Transaction } from "./transactions/transaction.js";
-import { materializeInputs, materializeOutputs } from "./transactions/staged.js";
+import { materializeInputs, materializeOutputs, materializeTransaction } from "./transactions/staged.js";
+import type { Transaction } from "./transactions/transaction.js";
+import { UTXI } from "./transactions/inputs.js";
+import { UTXO } from "./transactions/outputs.js";
 import type { AccountFolder } from "./accounts/folder.js";
-import type { FolderSummary } from "./accounts/summary.js";
+import type { LedgerDeltaSummary, LedgerSummary } from "./accounts/summary.js";
+import { computeAccountDeltas, summarizeAccountDelta } from "./accounts/delta.js";
 import { ProvenanceEngine } from "../equity-policy/provenance/engine.js";
 import { ExchangeResolution } from "../equity-policy/exchange.js";
 import { TerminalResolution } from "../equity-policy/terminal.js";
+import type { TransactionNode } from "./transactions/node.js";
 
 export enum Orientation {
     Positive = 1,
@@ -58,7 +62,7 @@ export class Ledger {
     }
 
     public newTransaction(spec: StagedTransaction): LedgerEvent {
-        const transaction = new Transaction(materializeInputs(spec.inputs, this.transactions), materializeOutputs(spec.outputs, this.transactions), this.transactions);
+        const transaction = materializeTransaction(spec, this.transactions);
         const event = new LedgerEvent([transaction]);
 
         this.appendEvent(event);
@@ -127,15 +131,20 @@ export class Ledger {
         // Backstop: no lot may ever be over-consumed. The per-transaction check catches double-spend
         // within a single transaction, but over-consumption spread across separately-constructed
         // transactions in one batch can only be detected here, against the full committed history.
-        for (const account of [...this.netAssets.getAccounts(), ...this.equity.getAccounts()]) {
-            for (const store of account.lotStores.values()) {
-                for (const utxo of store.utxos) {
-                    if (utxo.calculateAvailable(this.transactions) < 0n) return {ok: false, error: new Error(`Ledger invalid, a UTXO for ${utxo.position.name} in account "${account.name}" has been over-consumed (available ${utxo.calculateAvailable(this.transactions)})`)};
-                }
-                for (const utxi of store.utxis) {
-                    if (utxi.calculateAvailable(this.transactions) < 0n) return {ok: false, error: new Error(`Ledger invalid, a UTXI for ${utxi.position.name} in account "${account.name}" has been over-consumed (available ${utxi.calculateAvailable(this.transactions)})`)};
-                }
-            }
+        // No account holds its own lot list — every UTXO/UTXI reachable at all is found by scanning
+        // `this.transactions` directly, deduplicated by reference.
+        const utxos = new Set<UTXO>();
+        const utxis = new Set<UTXI>();
+        for (const tx of this.transactions) {
+            for (const output of tx.outputs) if (output instanceof UTXO) utxos.add(output);
+            for (const input of tx.inputs) if (input instanceof UTXI) utxis.add(input);
+        }
+
+        for (const utxo of utxos) {
+            if (utxo.calculateAvailable(this.transactions) < 0n) return {ok: false, error: new Error(`Ledger invalid, a UTXO for ${utxo.position.name} in account "${utxo.account.name}" has been over-consumed (available ${utxo.calculateAvailable(this.transactions)})`)};
+        }
+        for (const utxi of utxis) {
+            if (utxi.calculateAvailable(this.transactions) < 0n) return {ok: false, error: new Error(`Ledger invalid, a UTXI for ${utxi.position.name} in account "${utxi.account.name}" has been over-consumed (available ${utxi.calculateAvailable(this.transactions)})`)};
         }
 
         return {ok: true, value: undefined};
@@ -148,10 +157,21 @@ export class Ledger {
             equity: this.equity.summarize(position, this.transactions),
         };
     }
+
+    /**
+     * A diff view of {@link summarize}: instead of the absolute balance each account holds, reports
+     * the balance *change* `batch` caused, shaped as a tree mirroring the account hierarchy. Accepts
+     * any {@link TransactionNode} (a single transaction, an exchange/terminal group, ...) or a
+     * {@link LedgerEvent} — useful for auditing exactly what one recorded event or one sub-step of a
+     * larger resolution touched, without diffing `summarize()` snapshots taken before and after.
+     */
+    public summarizeDelta(batch: TransactionNode | LedgerEvent, position: Position): LedgerDeltaSummary {
+        const deltas = computeAccountDeltas(batch.flatten());
+        return {
+            position,
+            netAssets: summarizeAccountDelta(this.netAssets, position, deltas),
+            equity: summarizeAccountDelta(this.equity, position, deltas),
+        };
+    }
 }
 
-export interface LedgerSummary {
-    position: Position;
-    netAssets: FolderSummary;
-    equity: FolderSummary;
-}

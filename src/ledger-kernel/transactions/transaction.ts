@@ -4,13 +4,15 @@ import { type Input, UTXI, UTXOConsumption } from "./inputs.js";
 import { type Output, UTXO, UTXIConsumption } from "./outputs.js";
 import { TransactionNode } from "./node.js";
 
+/**
+ * The minimal shape lot-availability scans need — just the two arrays, not a real transaction's
+ * position/verification machinery. Any {@link Transaction} satisfies it structurally, but so does a
+ * lightweight `{ inputs, outputs }` view of not-yet-committed lots (see {@link materializeInputs}),
+ * letting those scans see provisional reservations without a fake `Transaction` instance.
+ */
+export type TransactionView = Pick<Transaction, "inputs" | "outputs">;
 
-export interface TransactionLike {
-    inputs: Input[];
-    outputs: Output[];
-}
-
-export class Transaction extends TransactionNode implements TransactionLike {
+export class Transaction extends TransactionNode {
     public position: Position;
 
     public inputs: Input[];

@@ -1,3 +1,5 @@
+import type { Result } from "../../utils.js";
+import { computeAccountDeltas, verifyBalanced, type AccountDelta } from "../accounts/delta.js";
 import type { Transaction } from "./transaction.js";
 
 /**
@@ -15,6 +17,16 @@ import type { Transaction } from "./transaction.js";
 export abstract class TransactionNode {
     private readonly _transactionNodeBrand = "TransactionNode" as const;
     public abstract flatten(): readonly Transaction[];
+
+    /** Net balance change this node caused to each account it touched — see {@link computeAccountDeltas}. */
+    public accountDeltas(): readonly AccountDelta[] {
+        return computeAccountDeltas(this.flatten());
+    }
+
+    /** Whether this node's own deltas are internally double-entry balanced — see {@link verifyBalanced}. */
+    public verifyBalanced(): Result<undefined, Error> {
+        return verifyBalanced(this.accountDeltas());
+    }
 }
 
 /**
